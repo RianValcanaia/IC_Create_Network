@@ -1,0 +1,47 @@
+network:
+  name: "my-fabric-network"
+  domain: "example.com"
+  version: "3.1.1"
+
+organizations:
+  - name: "Org1"
+    msp_id: "Org1MSP"
+    peers:
+      - name: "peer0"
+        port: 7051
+        chaincode_port: 7052
+      - name: "peer1"
+        port: 8051
+        chaincode_port: 8052
+    ca:
+      port: 7054
+
+  - name: "Org2"
+    msp_id: "Org2MSP"
+    peers:
+      - name: "peer0"
+        port: 9051
+        chaincode_port: 9052
+    ca:
+      port: 8054
+
+orderer:
+  type: "etcdraft"
+  nodes:
+    - name: "orderer0"
+      port: 7050
+      admin_port: 7053
+
+channels:
+  - name: "mychannel"
+    participating_orgs: ["Org1", "Org2"]
+
+chaincodes:
+  - name: "basic_asset"
+    version: "1.0"
+    pdc: # Definição de Private Data Collections
+      - name: "collectionMarbles"
+        policy: "OR('Org1MSP.member', 'Org2MSP.member')"
+        required_peer_count: 1
+        max_peer_count: 2
+        block_to_live: 1000
