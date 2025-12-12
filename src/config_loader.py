@@ -21,5 +21,5 @@ class ConfigLoader:
         else:
             raise FileNotFoundError("Arquivo versions.yaml não encontrado!")
 
-        co.infoln("Todas as configurações carregadas.\n")
+        co.successln("Todas as configurações carregadas.")
         return self.full_config
