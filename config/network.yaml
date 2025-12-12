@@ -1,47 +1,78 @@
+# Rever: member_only_write 
+
 network:
-  name: "my-fabric-network"
-  domain: "example.com"
-  version: "3.1.1"
+  name: "FabricNetwork"
+  domain: "exemplo.com"  # Domínio base para todos os nós, nos serão nome.exemplo.com
 
-organizations:
-  - name: "Org1"
-    msp_id: "Org1MSP"
-    peers:
-      - name: "peer0"
-        port: 7051
-        chaincode_port: 7052
-      - name: "peer1"
-        port: 8051
-        chaincode_port: 8052
-    ca:
-      port: 7054
-
-  - name: "Org2"
-    msp_id: "Org2MSP"
-    peers:
-      - name: "peer0"
-        port: 9051
-        chaincode_port: 9052
-    ca:
-      port: 8054
-
+# Configuração Global do Orderer
 orderer:
-  type: "etcdraft"
-  nodes:
-    - name: "orderer0"
+  type: "etcdraft"       # Opções: "etcdraft" ou "BFT"
+  batch_timeout: "2s"    # Tempo máximo para fechar um bloco
+  batch_size:
+    max_message_count: 500      # Máximo de transações por bloco 
+    absolute_max_bytes: "10MB"  # Tamanho máximo absoluto do bloco
+    preferred_max_bytes: "2MB"  # Tamanho máximo preferido do bloco
+  nodes:                 # Definição do nó do orderer
+    - name: "orderer0"   
+      host: "orderer0.exemplo.com" 
       port: 7050
       admin_port: 7053
 
+# Cada organização participante na rede possui: um CA, um ou mais peers, um MSP
+organizations:
+  - name: "Org1"
+    msp_id: "Org1MSP"
+    # Obrigatório ter CA (regra de negócio)
+    ca:
+      name: "ca-org1"
+      host: "ca.org1.exemplo.com"
+      port: 7054
+    peers:
+      - name: "peer0"
+        host: "peer0.org1.exemplo.com"
+        port: 7051
+        chaincode_port: 7052
+        # se não adiciona state_db, o padrão é GoLevelDB
+        # state_db: "CouchDB" # "CouchDB" ou "GoLevelDB"
+        # couchdb_port: 5984  # Obrigatório se state_db for CouchDB
+        
+      - name: "peer1"
+        host: "peer1.org1.exemplo.com"
+        port: 8051
+        chaincode_port: 8052
+
+  - name: "Org2"
+    msp_id: "Org2MSP"
+    ca:
+      name: "ca-org2"
+      host: "ca.org2.exemplo.com"
+      port: 8054
+    peers:
+      - name: "peer0"
+        host: "peer0.org2.exemplo.com"
+        port: 9051
+        chaincode_port: 9052
+
+# Definições de canais
 channels:
   - name: "mychannel"
     participating_orgs: ["Org1", "Org2"]
-
+    
+# Definição de chaincodes
 chaincodes:
   - name: "basic_asset"
+    path: "./chaincode/basic_asset"  
+    lang: "go"                       
     version: "1.0"
-    pdc: # Definição de Private Data Collections
-      - name: "collectionMarbles"
-        policy: "OR('Org1MSP.member', 'Org2MSP.member')"
+    sequence: 1         # versão logica do chaincode
+    endorsement_policy: "OR('Org1MSP.peer', 'Org2MSP.peer')"   # quem precisa aprovar a instalação do chaincode
+    pdc: 
+      - name: "collectionPrivate"
+        policy: "OR('Org1MSP.member')"
         required_peer_count: 1
-        max_peer_count: 2
+        max_peer_count: 3
         block_to_live: 1000
+        member_only_read: "OR('Org1MSP.member')"
+        # não sei ainda se isso precisa estar aqui
+        member_only_write: "OR('Org1MSP.member')"
+    
