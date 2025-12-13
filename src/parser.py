@@ -1,11 +1,14 @@
 """
-Responsável por validar a estrutura sintática e semântica do arquivo network.yaml.
-Também aplica valores padrão (defaults) onde permitido.
+Validador sintático e semântico da configuração da rede (network.yaml).
+
+Verifica a existência de chaves obrigatórias, tipos de dados corretos (portas
+como inteiros) e consistência lógica (ex: se uma org referenciada em um canal
+realmente foi definida). Também aplica valores padrão (defaults) onde permitido.
 
 Rever: valida_chaincode
 """
 import os
-from .colors import Colors as co
+from .utils import Colors as co
 
 class ConfigParser:
     # O ConfigLoader retorna um dict com 'network_topology' e 'env_versions'
@@ -20,8 +23,6 @@ class ConfigParser:
 
     # Executa todas as verificações. Retorna True se aprovado, False se houver erros.
     def valida(self):
-        co.infoln("Iniciando análise do network.yaml...")
-
         if not self.topologia:
             self.erros.append("O arquivo network.yaml parece estar vazio ou mal formatado.")
             return self._print_results()

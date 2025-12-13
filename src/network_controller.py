@@ -1,6 +1,14 @@
+"""
+Controlador de execução e orquestração de scripts da rede.
+
+Atua como ponte entre a aplicação Python e os scripts Bash, gerenciando
+variáveis de ambiente (versões do Fabric/Go, caminhos), preparando o
+sistema de arquivos e executando subprocessos para criação e limpeza da rede.
+"""
+
 import os
 import subprocess
-from .colors import Colors as co
+from .utils import Colors as co
 
 class NetworkController:
     def __init__(self, config, paths):
@@ -49,9 +57,6 @@ class NetworkController:
         except subprocess.CalledProcessError as e:
             co.errorln(f"Erro ao executar {script_name}: {e}")
             raise
-
-
-        
 
     def prepare_environment(self):
         # Cria as pastas necessárias

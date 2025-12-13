@@ -1,7 +1,14 @@
-# src/config_loader.py (Atualizado)
+"""
+Carregador de arquivos de configuração YAML.
+
+Responsável por ler os arquivos 'network.yaml' (topologia) e 'versions.yaml'
+(versões do ambiente), convertendo-os em dicionários Python para serem
+consumidos pelo restante da aplicação.
+"""
+
 import yaml
 import os
-from .colors import Colors as co
+from .utils import Colors as co
 
 class ConfigLoader:
     def __init__(self, network_config_path, versions_config_path):

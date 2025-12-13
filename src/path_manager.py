@@ -1,3 +1,11 @@
+"""
+Gerenciador central de caminhos e diretórios do projeto.
+
+Responsável por resolver caminhos absolutos para configurações, scripts e
+artefatos da rede, garantindo que a estrutura de diretórios necessária
+(organizations, channel-artifacts, docker) exista antes da execução.
+"""
+
 import os
 from pathlib import Path
 
