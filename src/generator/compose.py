@@ -1,3 +1,8 @@
+"""
+Rever: futuramente ver a TLS ativa para os CAs e a interface de operações.
+"""
+
+
 import yaml
 import os
 from ..utils import Colors as co
