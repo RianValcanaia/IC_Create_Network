@@ -1,3 +1,11 @@
+"""
+Utilitários para formatação de saída no terminal (CLI).
+
+Define códigos de cores ANSI e métodos estáticos para padronizar a exibição
+de mensagens de log (INFO, SUCESSO, AVISO, ERRO), melhorando a experiência
+do usuário.
+"""
+
 class Colors:
     RESET = "\033[0m"
     BLUE = "\033[34m"
