@@ -149,7 +149,7 @@ class ConfigParser:
     # valida a seção orderer
     def _valida_orderer(self):
         ord_secao = self.topologia.get('orderer', {})
-        if self._chaves_obrigatorias(ord_secao, ['type', 'nodes', 'batch_timeout', 'batch_size'], "seção 'orderer'"):
+        if self._chaves_obrigatorias(ord_secao, ['type', 'nodes', 'batch_timeout', 'batch_size', 'ca'], "seção 'orderer'"):
             
             # Valida tipo de consenso
             tipos_validos = ['etcdraft', 'BFT']
@@ -171,6 +171,12 @@ class ConfigParser:
                 if self._chaves_obrigatorias(node, ['name', 'host', 'port', 'admin_port'], "nodes do Orderer"):
                      if not isinstance(node['port'], int) or not isinstance(node['admin_port'], int):
                         self.erros.append(f"Orderer node '{node.get('name')}' tem portas inválidas (devem ser inteiros).")
+
+            # valida ca
+            ca = ord_secao.get('ca')
+            if not self._chaves_obrigatorias(ca, ['name', 'host', 'port'], "CA do Orderer"):
+                self.erros.append("Orderer deve ter uma CA definida com 'name', 'host' e 'port'.")
+            
 
     # valida a seção canais
     def _valida_canais(self):
