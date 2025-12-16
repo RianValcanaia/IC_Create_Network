@@ -17,6 +17,10 @@ orderer:
       host: "orderer0.exemplo.com" 
       port: 7050
       admin_port: 7053
+  ca:
+    name: "ca-orderer"
+    host: "ca.orderer.exemplo.com" # Host virtual para o docker
+    port: 7054
 
 # Cada organização participante na rede possui: um CA, um ou mais peers, um MSP
 organizations:
@@ -26,7 +30,7 @@ organizations:
     ca:
       name: "ca-org1"
       host: "ca.org1.exemplo.com"
-      port: 7054
+      port: 8054
     peers:
       - name: "peer0"
         host: "peer0.org1.exemplo.com"
@@ -46,7 +50,7 @@ organizations:
     ca:
       name: "ca-org2"
       host: "ca.org2.exemplo.com"
-      port: 8054
+      port: 9054
     peers:
       - name: "peer0"
         host: "peer0.org2.exemplo.com"
