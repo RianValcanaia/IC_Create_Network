@@ -18,6 +18,7 @@ fi
 
 # Executa o Docker Compose
 infoln "Subindo containers..."
+
 docker-compose -f "$COMPOSE_FILE" -p "fabric_network" up -d
 
 if [ $? -ne 0 ]; then
@@ -27,6 +28,18 @@ fi
 
 # Verifica se os containers estão rodando
 sleep 3
+
+USER_ID=$(id -u)
+GROUP_ID=$(id -g)
+
+# Roda um container Alpine minúsculo que monta a pasta network e muda o dono
+docker run --rm -v "$NETWORK_DIR":/data alpine chown -R $USER_ID:$GROUP_ID /data
+if [ $? -eq 0 ]; then
+    successln "Permissões corrigidas com sucesso."
+else
+    warnln "Falha ao corrigir permissões automaticamente. Talvez precise de sudo manual."
+fi
+
 
 if docker ps --format '{{.Names}} {{.Image}}' | grep -q "fabric-ca"; then
     successln "--- CAs Iniciadas com Sucesso ---"
