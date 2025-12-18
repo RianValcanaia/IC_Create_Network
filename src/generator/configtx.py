@@ -7,7 +7,7 @@ class ConfigTxGenerator:
         self.config = config
         self.paths = paths
         self.config_output_path = self.paths.network_dir / "configtx.yaml"
-        self.script_saida = self.paths.scripts_dir / "03_create_artifacts.sh"
+        self.script_saida = self.paths.scripts_dir / "create_artifacts.sh"
 
     def generate(self):        
         # gera as secoes do configtx.yaml
@@ -109,7 +109,6 @@ Application: &ApplicationDefaults
     <<: *ApplicationCapabilities
 """
 
-    # ESSA FUNCAO TEM COISAS SOBRE O RAFT E O BFT QUE NAO SEI COMO FAZER POR ENQUANTO, ACHO QUE NAO VAI SER NECESSARIO AGORA, RIAN DO FUTURO FIQUE MAIS INTELIGENTE PARA SABER COMO FAZER
     def _build_orderer_section(self):
         ord_conf = self.config['network_topology']['orderer']
         ord_type = ord_conf.get('type', 'etcdraft')
@@ -130,95 +129,6 @@ Application: &ApplicationDefaults
         yaml_content += f"    MaxMessageCount: {max_msg}\n"
         yaml_content += f"    AbsoluteMaxBytes: {abs_max_bytes}\n"
         yaml_content += f"    PreferredMaxBytes: {pref_max_bytes}\n"
-        yaml_content += "    MaxChannels: 0\n"   # se 0 implica ilimitado, ver futuramente de usar no network.yaml
-
-        # ver como fazer futuramente, ainda não é um problema 
-        if ord_type == 'bft':
-            # aqui vai a definicao do consenterMapping, por enquanto vou usar somente o raft, futuramente vejo isso, pois tenho que estudar mais o bft antes de implementar, segue exemplo de como talvez seja
-            # # ConsenterMapping contains the definition of consenter identity, endpoints, and crypto material.
-            # # The ConsenterMapping is used in the BFT consensus protocol, and should include enough servers to ensure
-            # # fault-tolerance; In BFT this number is at least 3*F+1, where F is the number of potential failures.
-            # # In BFT it is highly recommended that the addresses for delivery & broadcast (the OrdererEndpoints item in the
-            # # org definition) map 1:1 to the Orderer/ConsenterMapping (for cluster consensus). That is, every consenter should
-            # # be represented by a delivery endpoint. Note that in BFT (V3) global Orderer/Addresses are no longer supported.
-            # ConsenterMapping:
-            #     - ID: 1
-            #     Host: bft0.example.com
-            #     Port: 7050
-            #     MSPID: OrdererOrg1
-            #     Identity: /path/to/identity
-            #     ClientTLSCert: path/to/ClientTLSCert0
-            #     ServerTLSCert: path/to/ServerTLSCert0
-            #     - ID: 2
-            #     Host: bft1.example.com
-            #     Port: 7050
-            #     MSPID: OrdererOrg2
-            #     Identity: /path/to/identity
-            #     ClientTLSCert: path/to/ClientTLSCert1
-            #     ServerTLSCert: path/to/ServerTLSCert1
-            #     - ID: 3
-            #     Host: bft2.example.com
-            #     Port: 7050
-            #     MSPID: OrdererOrg3
-            #     Identity: /path/to/identity
-            #     ClientTLSCert: path/to/ClientTLSCert2
-            #     ServerTLSCert: path/to/ServerTLSCert2
-            #     - ID: 4
-            #     Host: bft3.example.com
-            #     Port: 7050
-            #     MSPID: OrdererOrg4
-            #     Identity: /path/to/identity
-            #     ClientTLSCert: path/to/ClientTLSCert3
-            #     ServerTLSCert: path/to/ServerTLSCert3
-            pass
-        else:
-            # ver se é necessário, acho que por enquanto não:
-            # EtcdRaft:
-            # # The set of Raft replicas for this network. For the etcd/raft-based
-            # # implementation, we expect every replica to also be an OSN. Therefore,
-            # # a subset of the host:port items enumerated in this list should be
-            # # replicated under the Orderer.Addresses key above.
-            # Consenters:
-            # - Host: raft0.example.com
-            #     Port: 7050
-            #     ClientTLSCert: path/to/ClientTLSCert0
-            #     ServerTLSCert: path/to/ServerTLSCert0
-            # - Host: raft1.example.com
-            #     Port: 7050
-            #     ClientTLSCert: path/to/ClientTLSCert1
-            #     ServerTLSCert: path/to/ServerTLSCert1
-            # - Host: raft2.example.com
-            #     Port: 7050
-            #     ClientTLSCert: path/to/ClientTLSCert2
-            #     ServerTLSCert: path/to/ServerTLSCert2
-            pass
-        
-        # ver se é necessario usar options, por enquanto não
-        # # Options to be specified for all the etcd/raft nodes. The values here
-        # # are the defaults for all new channels and can be modified on a
-        # # per-channel basis via configuration updates.
-        # Options:
-        # # TickInterval is the time interval between two Node.Tick invocations.
-        # TickInterval: 500ms
-
-        # # ElectionTick is the number of Node.Tick invocations that must pass
-        # # between elections. That is, if a follower does not receive any
-        # # message from the leader of current term before ElectionTick has
-        # # elapsed, it will become candidate and start an election.
-        # # ElectionTick must be greater than HeartbeatTick.
-        # ElectionTick: 10
-
-        # # HeartbeatTick is the number of Node.Tick invocations that must
-        # # pass between heartbeats. That is, a leader sends heartbeat
-        # # messages to maintain its leadership every HeartbeatTick ticks.
-        # HeartbeatTick: 1
-
-        # # MaxInflightBlocks limits the max number of in-flight append messages
-        # # during optimistic replication phase.
-        # MaxInflightBlocks: 5
-
-        # # SnapshotIntervalSize defines number of bytes per which a snapshot is taken
-        # SnapshotIntervalSize: 16 MB
 
         yaml_content += "  Organizations:\n"
         yaml_content += "  Policies:\n"
@@ -251,51 +161,76 @@ Channel: &ChannelDefaults
         domain = self.config['network_topology']['network']['domain']
         ord_conf = self.config['network_topology']['orderer']
         ord_type = ord_conf.get('type', 'etcdraft').lower()
+        orgs = self.config['network_topology']['organizations']
+        channels = self.config['network_topology'].get('channels', [])
 
         yaml_content = "Profiles:\n"
-        if ord_type == 'bft':
-            yaml_content += f"  ChannelUsingBFT:\n"
-        else:
-            yaml_content += f"  ChannelUsingRaft:\n"
-        yaml_content += "    <<: *ChannelDefaults\n"
         
-        # orderer config do profile
+        consenters_block = ""
+        if ord_type == 'bft':
+            consenters_block = self._build_smart_bft_consenters(domain)
+        else:
+            consenters_block = self._build_raft_consenters(domain)
+
+        bootstrap_profile = None
+        bootstrap_channel = None
+        for cc in channels:
+            if len(cc.get('participating_orgs', [])) == len(orgs):
+                bootstrap_channel = cc['name']  # pega o primeiro com todas as orgs para bootstrap
+                bootstrap_profile = bootstrap_channel[0].upper() + bootstrap_channel[1:] + "Profile"
+                break
+
+        if not bootstrap_channel:
+            raise Exception("Nenhum canal de bootstrap encontrado. É necessário um canal que inclua todas as organizações.")
+                
+        yaml_content += f"  {bootstrap_profile}:\n"
+        yaml_content += "    <<: *ChannelDefaults\n"
         yaml_content += "    Orderer:\n"
         yaml_content += "      <<: *OrdererDefaults\n"
-        yaml_content += f"      OrdererType: {ord_type}\n"
-        
-        # lida com os consensos
-        if ord_type == 'bft':
-            yaml_content += self._build_smart_bft_consenters(domain)
-        else:
-            yaml_content += self._build_raft_consenters(domain)
-            
+        yaml_content += consenters_block
         yaml_content += "      Organizations:\n"
         yaml_content += "        - *OrdererOrg\n"
         yaml_content += "      Capabilities: *OrdererCapabilities\n"
         
-        # adicione aplications config do profile
         yaml_content += "    Application:\n"
         yaml_content += "      <<: *ApplicationDefaults\n"
         yaml_content += "      Organizations:\n"
-        
-        for org in self.config['network_topology']['organizations']:
-            org_name = org['name']
+        for o in orgs:
+            org_name = o['name']
             yaml_content += f"        - *{org_name}\n"
-            
         yaml_content += "      Capabilities: *ApplicationCapabilities\n"
-        
-        # consortiums 
-        yaml_content += "    Consortiums:\n"
-        yaml_content += "      SampleConsortium:\n"
-        yaml_content += "        Organizations:\n"
-        for org in self.config['network_topology']['organizations']:
-            org_name = org['name']
-            yaml_content += f"          - *{org_name}\n"
+
+        # perfis para outros canais
+        for ch in channels:
+            ch_name = ch['name']
+            profile_name = ch_name[0].upper() + ch_name[1:] + "Profile"
+            
+            if profile_name == bootstrap_profile:
+                continue  # ja criado acima
+
+            yaml_content += f"\n  {profile_name}:\n"
+            yaml_content += "    <<: *ChannelDefaults\n"
+            
+            yaml_content += "    Orderer:\n"
+            yaml_content += "      <<: *OrdererDefaults\n"
+            yaml_content += consenters_block # reusa a configuracao de consenso
+            yaml_content += "      Organizations:\n"
+            yaml_content += "        - *OrdererOrg\n"
+            yaml_content += "      Capabilities: *OrdererCapabilities\n"
+
+            yaml_content += "    Application:\n"
+            yaml_content += "      <<: *ApplicationDefaults\n"
+            yaml_content += "      Organizations:\n"
+            
+            participating = ch.get('participating_orgs', [])
+            for p_org in participating:
+                yaml_content += f"        - *{p_org}\n"
+                
+            yaml_content += "      Capabilities: *ApplicationCapabilities\n"
 
         return yaml_content
 
-    # ------------- Helpers para Consenso -------------
+    # ------------ HELPERS (Raft/BFT/Endpoints) ------------
     def _build_raft_consenters(self, domain):
         content = "      EtcdRaft:\n"
         content += "        Consenters:\n"
@@ -303,7 +238,6 @@ Channel: &ChannelDefaults
             host = f"{node['name']}.{domain}"
             port = node['port']
             server_tls = f"organizations/ordererOrganizations/{domain}/orderers/{host}/tls/server.crt"
-            
             content += f"          - Host: {host}\n"
             content += f"            Port: {port}\n"
             content += f"            ClientTLSCert: {server_tls}\n"
@@ -316,24 +250,18 @@ Channel: &ChannelDefaults
         for node in self.config['network_topology']['orderer']['nodes']:
             host = f"{node['name']}.{domain}"
             port = node['port']
-            # para BFT, precisa do certificado de identidade (Enrollment Cert) além do TLS
             identity_cert = f"organizations/ordererOrganizations/{domain}/orderers/{host}/msp/signcerts/cert.pem"
             server_tls = f"organizations/ordererOrganizations/{domain}/orderers/{host}/tls/server.crt"
-            
-            # Consenter ID geralmente é o próprio ID do MSP se for 1 node por org, 
-            # ou o ID do node. Vamos usar o ID do node para garantir unicidade local.
             consenter_id = node.get('consenter_id', node.get('id', 1)) 
-
             content += f"          - ConsenterId: {consenter_id}\n"
             content += f"            Host: {host}\n"
             content += f"            Port: {port}\n"
             content += f"            Identity: {identity_cert}\n"
             content += f"            ClientTLSCert: {server_tls}\n"
             content += f"            ServerTLSCert: {server_tls}\n"
-            content += f"            MspId: OrdererMSP\n" # Assumindo unico MSP para orderers por enquanto
+            content += f"            MspId: OrdererMSP\n"
         return content
     
-    # ------------- Funções Auxiliares --------------
     def _get_orderer_endpoints_list(self):
         endpoints = []
         domain = self.config['network_topology']['network']['domain']
@@ -341,42 +269,65 @@ Channel: &ChannelDefaults
             endpoints.append(f"{node['name']}.{domain}:{node['port']}")
         return endpoints
 
-    # ver isso ainda, como tem mais de um canal precisa gerar artefatos para cada um?
+    # ------------ Cria o script shell (create_artifacts.sh) ------------
     def _create_shell_script(self):
-        channels = self.config['network_topology']['network'].get('channels', {})
+        channels = self.config['network_topology'].get('channels', [])
+        orgs = self.config['network_topology']['organizations']
 
+        bootstrap_profile = None
+        bootstrap_channel = None
+        for cc in channels:
+            if len(cc.get('participating_orgs', [])) == len(orgs):
+                bootstrap_channel = cc['name']  # pega o primeiro com todas as orgs para bootstrap, mesma logica do profile
+                bootstrap_profile = bootstrap_channel[0].upper() + bootstrap_channel[1:] + "Profile"
+                break
+
+        if not bootstrap_channel:
+            raise Exception("Nenhum canal de bootstrap encontrado. É necessário um canal que inclua todas as organizações.")
+        
         linhas = []
-        linhas.append("#!/bin/bash\n")
+        linhas.append("#!/bin/bash")
         linhas.append("set -e")
-        linhas.append(f"source {self.paths.scripts_dir}/utils.sh\n")
+        linhas.append(f"source {self.paths.scripts_dir}/utils.sh")
         linhas.append(f"export PATH={self.paths.base_dir}/bin:$PATH")
         
-        # Configura onde buscar o configtx.yaml
         linhas.append(f"export FABRIC_CFG_PATH={self.paths.network_dir}\n")
-        
         output = f"{self.paths.network_dir}/channel-artifacts"
         
-        linhas.append('infoln "--- Gerando Bloco Gênese ---"\n')
-        linhas.append(f"mkdir -p {self.paths.network_dir}/channel-artifacts")
+        linhas.append("# cria Genesis Block")
+        linhas.append('infoln "--- Gerando Blocos de Configuração (Fabric v3) ---"')
+        linhas.append(f"mkdir -p {output}")
         
-        cmd = (
-            f"configtxgen -profile GenesisProfile "
-            f"-channelID system-channel "
+        # Genesis Block, para o canal de bootstrap
+        cmd_genesis = (
+            f"configtxgen -profile {bootstrap_profile} "
+            f"-channelID {bootstrap_channel} "
             f"-outputBlock {output}/genesis.block"
         )
+        linhas.append(f"infoln 'Gerando Genesis Block ({bootstrap_channel})...'")
+        linhas.append(cmd_genesis)
         
-        linhas.append(f"infoln 'Gerando: {output}/genesis.block'")
-        linhas.append(cmd)
+        # blocos de configuracao para outros canais
         for ch in channels:
-            cmd = (
-                f"configtxgen -profile GenesisProfile "
-                f"-channelID {ch['name']} "
-                f"-outputBlock {output}/{ch['name']}.tx"
+            ch_name = ch['name']
+
+            if ch_name == bootstrap_channel:
+                linhas.append(f"# Copiando genesis block para o canal {ch_name}")
+                linhas.append(f"cp {output}/genesis.block {output}/{ch_name}.block")  # so para ter ele mesmo
+                continue  # ja criado acima
+            
+            profile_name = ch_name[0].upper() + ch_name[1:] + "Profile"
+            
+            cmd_channel = (
+                f"configtxgen -profile {profile_name} "
+                f"-channelID {ch_name} "
+                f"-outputBlock {output}/{ch_name}.block"
             )
-            linhas.append(f"infoln 'Gerando: {output}/{ch['name']}.tx'")
-            linhas.append(cmd)
+            linhas.append(f"\n# gerando bloco para o canal {ch_name}")
+            linhas.append(f"infoln 'Gerando Block: {output}/{ch_name}.block'")
+            linhas.append(cmd_channel)
         
-        linhas.append('successln "Bloco Gênese criado com sucesso!"')
+        linhas.append('\nsuccessln "Artefatos criados com sucesso!"')
 
         with open(self.script_saida, 'w') as f:
             f.write("\n".join(linhas))
