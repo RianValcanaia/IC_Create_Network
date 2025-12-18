@@ -4,19 +4,17 @@ source $(dirname "$0")/utils.sh
 
 # Define o diretório raiz do projeto
 # Se NETWORK_DIR vier do Python, usamos o pai dele como raiz, ou o diretório atual
-PROJECT_ROOT=${NETWORK_DIR%/network} # Remove '/network' do final para pegar a raiz
+PROJECT_ROOT=${NETWORK_DIR%/network} # remove '/network' do final para pegar a raiz
 if [ -z "$PROJECT_ROOT" ]; then
     PROJECT_ROOT="."
 fi
 
-# Adiciona ./bin local ao PATH temporariamente para verificação
+# adiciona ./bin local ao PATH temporariamente para verificação
 export PATH="$PROJECT_ROOT/bin:$PATH"
 
 infoln "Verificando pré-requisitos..."
 
-# ---------------------------------------------------------
-# 1. Verificar Docker
-# ---------------------------------------------------------
+# verificar Docker
 if ! command -v docker &> /dev/null; then
     errorln "Docker não encontrado! Instale o Docker Desktop ou Engine."
     exit 1
@@ -24,9 +22,7 @@ fi
 DOCKER_V=$(docker --version)
 successln "Docker encontrado: $DOCKER_V"
 
-# ---------------------------------------------------------
-# 2. Verificar Go (Opcional)
-# ---------------------------------------------------------
+# verificar Go
 if command -v go &> /dev/null; then
     CURRENT_GO=$(go version | awk '{print $3}' | sed 's/go//')
     if [[ "$CURRENT_GO" < "$GO_VERSION" ]]; then
@@ -38,10 +34,7 @@ else
     warnln "Go não instalado (OK se não for compilar Chaincode em Go)"
 fi
 
-# ---------------------------------------------------------
-# 3. Verificar e Baixar Binários do Fabric
-# ---------------------------------------------------------
-
+# verificar e baixar binários do Fabric
 NEED_INSTALL=false
 if command -v configtxgen &> /dev/null; then
     FABRIC_BIN_VER=$(configtxgen -version | grep "Version:" | awk '{print $2}' | sed "s/^v//")
@@ -56,10 +49,7 @@ else
     NEED_INSTALL=true
 fi
 
-# ----------------------------------------
-# Verificar versão do Fabric-CA (CA client)
-# ----------------------------------------
-
+# verificar versao do Fabric-CA
 if command -v fabric-ca-client &> /dev/null; then
     CA_BIN_VER=$(fabric-ca-client version | grep "Version:" | awk '{print $2}' | sed "s/^v//")
     if [[ "$CA_BIN_VER" != "$CA_VERSION" ]]; then
@@ -73,9 +63,7 @@ else
     NEED_INSTALL=true
 fi
 
-# ----------------------------------------
-# Instalar se necessário
-# ----------------------------------------
+# instala se necessário
 
 if [ "$NEED_INSTALL" = true ]; then
     infoln "Baixando Fabric $FABRIC_VERSION e CA $CA_VERSION..."
@@ -84,7 +72,7 @@ if [ "$NEED_INSTALL" = true ]; then
     curl -sSL https://raw.githubusercontent.com/hyperledger/fabric/main/scripts/install-fabric.sh -o install-fabric.sh
     chmod +x install-fabric.sh
     
-    # Baixa binários para a pasta ./bin
+    # baixa binários para a pasta ./bin
     ./install-fabric.sh --fabric-version $FABRIC_VERSION --ca-version $CA_VERSION binary docker
     
     popd > /dev/null
@@ -92,5 +80,11 @@ if [ "$NEED_INSTALL" = true ]; then
     
     successln "Instalação concluída em $PROJECT_ROOT/bin"
 fi
+
+CONFIG_DIR="$PROJECT_ROOT/config"
+
+remove_if_exists "$CONFIG_DIR/configtx.yaml"
+remove_if_exists "$CONFIG_DIR/core.yaml"
+remove_if_exists "$CONFIG_DIR/orderer.yaml"
 
 successln "--- Check Finalizado ---"

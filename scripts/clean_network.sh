@@ -1,33 +1,17 @@
 #!/bin/bash
 
-
 source $(dirname "$0")/utils.sh
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-# REMOVER arquivos específicos da pasta config/
-CONFIG_DIR="$PROJECT_ROOT/config"
-
-remove_if_exists() {
-    local file="$1"
-    if [ -f "$file" ]; then
-        infoln "Removendo $(basename "$file")..."
-        rm -f "$file"
-        successln "$(basename "$file") removido."
-    else
-        warnln "$(basename "$file") não existe."
-    fi
-}
-
-remove_if_exists "$CONFIG_DIR/configtx.yaml"
-remove_if_exists "$CONFIG_DIR/core.yaml"
-remove_if_exists "$CONFIG_DIR/orderer.yaml"
-remove_if_exists "scripts/register_enroll.sh"
-remove_if_exists "scripts/create_artifacts.sh"
+# remove arquivos especificos da pasta config/
+SCRIPTS_DIR="$PROJECT_ROOT/config"
+remove_if_exists "$SCRIPTS_DIR/register_enroll.sh"
+remove_if_exists "$SCRIPTS_DIR/create_artifacts.sh"
 
 infoln "Removendo arquivos docker-compose gerados..."
 
-# Docker compose down
+# docker compose down
 CA_COMPOSE="$PROJECT_ROOT/network/compose/compose-ca.yaml"
 if [ -f "$CA_COMPOSE" ]; then
     infoln "Encontrado compose-ca.yaml. Derrubando containers..."
@@ -41,17 +25,14 @@ else
     warnln "Arquivo $CA_COMPOSE não encontrado. Pulando etapa de shutdown do Docker."
 fi
 
-# Limpa a pasta network/ (organizations, compose, genesis block)
+# limpa a pasta network/ (organizations, compose, genesis block)
 if [ -d "$PROJECT_ROOT/network" ]; then
     infoln "Removendo conteúdo gerado em network/..."
 
-    # TRUQUE: Usamos um container Alpine temporário para apagar os arquivos.
-    # Como o Docker roda como root, ele tem permissão para apagar os arquivos das CAs.
-    # Montamos a pasta 'network' do host em '/data' dentro do container.
+    # container Alpine temporário para apagar os arquivos.
     docker run --rm -v "$PROJECT_ROOT/network":/data alpine sh -c 'rm -rf /data/*'
     
-    # Se o comando docker acima falhar (ex: imagem alpine não baixada), 
-    # tentamos o rm normal como fallback, ignorando erros.
+    # se falhar o anterior tenta apagar diretamente
     rm -rf "$PROJECT_ROOT/network"/* 2>/dev/null || true
     
     successln "Pasta network/ limpa."

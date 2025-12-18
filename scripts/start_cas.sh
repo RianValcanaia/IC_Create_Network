@@ -2,21 +2,21 @@
 
 source $(dirname "$0")/utils.sh
 
-# Define o diretório 'network' caso não tenha sido injetado pelo Python
+# define o diretório 'network' caso não tenha sido injetado pelo Python
 if [ -z "$NETWORK_DIR" ]; then
     NETWORK_DIR="$(cd "$(dirname "$0")/../network" && pwd)"
 fi
 
 COMPOSE_FILE="$NETWORK_DIR/compose/compose-ca.yaml"
 
-# Verificação de Segurança
+# verificacao de seguranca
 if [ ! -f "$COMPOSE_FILE" ]; then
     errorln "Arquivo não encontrado: $COMPOSE_FILE"
     errorln "O gerador Python (src/generator/compose.py) rodou com sucesso?"
     exit 1
 fi
 
-# Executa o Docker Compose
+# executa o docker compose
 infoln "Subindo containers..."
 
 docker-compose -f "$COMPOSE_FILE" -p "fabric_network" up -d
@@ -26,13 +26,13 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Verifica se os containers estão rodando
+# verifica se os containers estao rodando
 sleep 3
 
 USER_ID=$(id -u)
 GROUP_ID=$(id -g)
 
-# Roda um container Alpine minúsculo que monta a pasta network e muda o dono
+# roda um container Alpine que monta a pasta network e muda o dono
 docker run --rm -v "$NETWORK_DIR":/data alpine chown -R $USER_ID:$GROUP_ID /data
 if [ $? -eq 0 ]; then
     successln "Permissões corrigidas com sucesso."
