@@ -72,7 +72,6 @@ class ConfigParser:
         # 'channels' e 'chaincodes' são tecnicamente opcionais para subir a infra, mas recomendados
         self._chaves_obrigatorias(self.topologia, obrigatorios, "Raiz do network.yaml")
 
-        
     # valida a seção network
     def _valida_secao_network(self):
         net = self.topologia.get('network', {})
@@ -198,17 +197,21 @@ class ConfigParser:
                     if org_name not in self.orgs_definidas:
                         self.erros.append(f"Canal '{c['name']}' referencia a organização '{org_name}', mas ela não foi definida em 'organizations'.")
 
-    # valida a seção chaincodes
+    # valida a seção chaincodes, ainda não validando isso, futuramente preciso ver isso
     def _valida_chaincodes(self):
         ccs = self.topologia.get('chaincodes', [])
+        channels = self.topologia.get('channels', [])
+
         if len(ccs) < 1:
             self.erros.append("Nenhum chaincode definido na seção 'chaincodes'. Definir pelo menos um chaincode.")
             return 
         
         for cc in ccs:
-            if self._chaves_obrigatorias(cc, ['name', 'path', 'version', 'lang', 'sequence', 'endorsement_policy'], f"seção 'chaincodes' - '{cc['name']}'"):
+            if self._chaves_obrigatorias(cc, ['name', 'path', 'channel', 'version', 'lang', 'sequence', 'endorsement_policy'], f"seção 'chaincodes' - '{cc['name']}'"):
                 if not os.path.exists(cc['path']):
                     self.erros.append(f"Chaincode '{cc['name']}' não existe: {cc['path']} não encontrado.")
+                if cc['channel'] not in [ch['name'] for ch in channels]:
+                    self.erros.append(f"Chaincode '{cc['name']}' referencia canal '{cc['channel']}' que não foi definido em 'channels'.")
                 
                 # Valida Private Data Collections se houver
                 if 'pdc' in cc:
