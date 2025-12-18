@@ -93,7 +93,7 @@ organizations:
         port: 14051
         chaincode_port: 14052
 
-# Definições de canais
+# Definições de canais, é necessario ter um canal com todas as orgs para bootstrap inicial, like system-channel
 channels:
   - name: "channel-all"
     participating_orgs: ["Org1", "Org2", "Org3", "Org4"]
