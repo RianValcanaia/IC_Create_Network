@@ -1,8 +1,8 @@
 1: 01_start_cas.sh; docker-compose-ca.yaml,CAs rodando (TCP Port) -> pronto 
 
-2: 02_register_enroll.sh; CAs rodando, Pastas organizations/peerOrganizations... (MSPs) -> trabalhando nisso
+2: 02_register_enroll.sh; CAs rodando, Pastas organizations/peerOrganizations... (MSPs) -> pronto
 
-3: 03_create_artifacts.sh; MSPs (passo 2),genesis_block.pb
+3: 03_create_artifacts.sh; MSPs (passo 2),genesis_block.pb -> trabalhando nisso  -> fazendo isso
 
 4: 04_start_nodes.sh; Certificados e Genesis Block,Peers e Orderers rodando
 

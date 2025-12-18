@@ -44,6 +44,7 @@ remove_if_exists "$CONFIG_DIR/configtx.yaml"
 remove_if_exists "$CONFIG_DIR/core.yaml"
 remove_if_exists "$CONFIG_DIR/orderer.yaml"
 remove_if_exists "scripts/register_enroll.sh"
+remove_if_exists "scripts/create_artifacts.sh"
 
 infoln "Removendo arquivos docker-compose gerados..."
 
