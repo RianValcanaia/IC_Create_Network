@@ -176,13 +176,14 @@ class ConfigParser:
             if not self._chaves_obrigatorias(ca, ['name', 'host', 'port'], "CA do Orderer"):
                 self.erros.append("Orderer deve ter uma CA definida com 'name', 'host' e 'port'.")
             
-
     # valida a seção canais
     def _valida_canais(self):
         canais = self.topologia.get('channels', [])
-        # Canais são opcionais na validação inicial, mas se existirem, devem estar corretos
+        # canais nao sao opcionais, precisamos ter ao menos um canal e que esse canal contenha todas as orgs para o bootstral
+        c_all = False
+
         if len(canais) < 1:
-            self.erros.append("Nenhum canal definido na seção 'channels'. Definir pelo menos um canal.")
+            self.erros.append("Nenhum canal definido na seção 'channels'. Definir pelo menos um canal que contenha todas as orgs para bootstrap inicial. ")
             return
         
         if not isinstance(canais, list):
@@ -191,11 +192,19 @@ class ConfigParser:
 
         for c in canais:
             if self._chaves_obrigatorias(c, ['name', 'participating_orgs'], f"Seção channels - {c.get('name', '')}"):
-                # Validação Semântica: As orgs do canal existem?
                 part_orgs = c['participating_orgs']
+
+                # verifica se existe algum canal que contenha todas as orgs
+                if len(part_orgs) == len(self.orgs_definidas):
+                    c_all = True
+
+                # as orgs do canal existem?
                 for org_name in part_orgs:
                     if org_name not in self.orgs_definidas:
                         self.erros.append(f"Canal '{c['name']}' referencia a organização '{org_name}', mas ela não foi definida em 'organizations'.")
+
+        if not c_all:
+            self.erros.append("Nenhum canal definido contém todas as organizações. É necessário ter pelo menos um canal com todas as orgs para bootstrap inicial.")       
 
     # valida a seção chaincodes, ainda não validando isso, futuramente preciso ver isso
     def _valida_chaincodes(self):
