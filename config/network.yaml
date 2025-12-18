@@ -56,16 +56,55 @@ organizations:
         host: "peer0.org2.exemplo.com"
         port: 9051
         chaincode_port: 9052
+      - name: "peer1"
+        host: "peer1.org2.exemplo.com"
+        port: 10051
+        chaincode_port: 10052
+
+  - name: "Org3"
+    msp_id: "Org3MSP"
+    ca:
+      name: "ca-org3"
+      host: "ca.org3.exemplo.com"
+      port: 10054
+    peers:
+      - name: "peer0"
+        host: "peer0.org3.exemplo.com"
+        port: 11051
+        chaincode_port: 11052
+      - name: "peer1"
+        host: "peer1.org3.exemplo.com"
+        port: 12051
+        chaincode_port: 12052
+
+  - name: "Org4"
+    msp_id: "Org4MSP"
+    ca:
+      name: "ca-org4"
+      host: "ca.org4.exemplo.com"
+      port: 11054
+    peers:
+      - name: "peer0"
+        host: "peer0.org4.exemplo.com"
+        port: 13051
+        chaincode_port: 13052
+      - name: "peer1"
+        host: "peer1.org4.exemplo.com"
+        port: 14051
+        chaincode_port: 14052
 
 # Definições de canais
 channels:
-  - name: "mychannel"
+  - name: "channel-all"
+    participating_orgs: ["Org1", "Org2", "Org3", "Org4"]
+  - name : "channel12"
     participating_orgs: ["Org1", "Org2"]
     
 # Definição de chaincodes
 chaincodes:
   - name: "basic_asset"
-    path: "./chaincode/basic_asset"  
+    path: "./chaincode/basic_asset" 
+    channel: "channel-all"   # canal onde o chaincode sera instalado 
     lang: "go"                       
     version: "1.0"
     sequence: 1         # versão logica do chaincode
