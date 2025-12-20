@@ -13,8 +13,24 @@ orderer:
     absolute_max_bytes: "10MB"  # Tamanho máximo absoluto do bloco
     preferred_max_bytes: "2MB"  # Tamanho máximo preferido do bloco
   nodes:                 # Definição do nó do orderer
+    # quatro nos orderes no minimo para tolerar uma falha bizantina, n = 3f +1
     - name: "orderer0"   
       host: "orderer0.exemplo.com" 
+      port: 7050
+      admin_port: 7053
+
+    - name: "orderer1"
+      host: "orderer1.exemplo.com"
+      port: 7050
+      admin_port: 7053
+
+    - name: "orderer2"
+      host: "orderer2.exemplo.com"
+      port: 7050
+      admin_port: 7053
+       
+    - name: "orderer3"
+      host: "orderer3.exemplo.com"
       port: 7050
       admin_port: 7053
   ca:
