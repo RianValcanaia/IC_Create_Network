@@ -98,7 +98,7 @@ def main():
         # inicializa controller da rede
         controller = NetworkController(config, paths)
         paths.ensure_network_dirs()
-
+        
         # network_up(controller, config, paths)
         clean_files(controller)
     except Exception as e:

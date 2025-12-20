@@ -5,7 +5,7 @@ source $(dirname "$0")/utils.sh
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # remove arquivos especificos da pasta config/
-SCRIPTS_DIR="$PROJECT_ROOT/config"
+SCRIPTS_DIR="$PROJECT_ROOT/scripts"
 remove_if_exists "$SCRIPTS_DIR/register_enroll.sh"
 remove_if_exists "$SCRIPTS_DIR/create_artifacts.sh"
 
