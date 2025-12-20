@@ -76,12 +76,13 @@ class ConfigTxGenerator:
         return orgs_yaml
 
     def _build_capabilities_section(self):
+        ord_type = self.config['network_topology']['orderer'].get('type', 'etcdraft').lower()
         return """
 Capabilities:
   Channel: &ChannelCapabilities
-    V2_0: true
+    V3_0: true
   Orderer: &OrdererCapabilities
-    V2_0: true
+    V3_0: true
   Application: &ApplicationCapabilities
     V2_5: true"""
 
@@ -110,25 +111,38 @@ Application: &ApplicationDefaults
 """
 
     def _build_orderer_section(self):
+        domain = self.config['network_topology']['network']['domain']
         ord_conf = self.config['network_topology']['orderer']
         ord_type = ord_conf.get('type', 'etcdraft')
+
+        # somente por garantia de que o usuario digitou certo
+        if ord_type.lower() == 'bft':
+            ord_type = 'BFT'
+        else:
+            ord_type = 'etcdraft'
         
-        # Defaults
+        # defaults
         batch_timeout = ord_conf.get('batch_timeout', '2s')
         max_msg = ord_conf.get('batch_size', {}).get('max_message_count', 10)
         abs_max_bytes = ord_conf.get('batch_size', {}).get('absolute_max_bytes', '99 MB')
         pref_max_bytes = ord_conf.get('batch_size', {}).get('preferred_max_bytes', '512 KB')
         
         yaml_content = "Orderer: &OrdererDefaults\n"
+        yaml_content += f"  OrdererType: {ord_type}\n"
         yaml_content += "  Addresses:\n"
-        for ep in self._get_orderer_endpoints_list():
-            yaml_content += f"    - {ep}\n"
+        # for ep in self._get_orderer_endpoints_list():
+        #     yaml_content += f"    - {ep}\n"
             
         yaml_content += f"  BatchTimeout: {batch_timeout}\n"
         yaml_content += "  BatchSize:\n"
         yaml_content += f"    MaxMessageCount: {max_msg}\n"
         yaml_content += f"    AbsoluteMaxBytes: {abs_max_bytes}\n"
         yaml_content += f"    PreferredMaxBytes: {pref_max_bytes}\n"
+
+        if ord_type == 'etcdraft':
+            yaml_content += self._build_raft_consenters(domain)
+        else:
+            yaml_content += self._build_smart_bft_consenters(domain)
 
         yaml_content += "  Organizations:\n"
         yaml_content += "  Policies:\n"
@@ -158,22 +172,13 @@ Channel: &ChannelDefaults
 """
 
     def _build_profiles_section(self):
-        domain = self.config['network_topology']['network']['domain']
-        ord_conf = self.config['network_topology']['orderer']
-        ord_type = ord_conf.get('type', 'etcdraft').lower()
         orgs = self.config['network_topology']['organizations']
         channels = self.config['network_topology'].get('channels', [])
 
         yaml_content = "Profiles:\n"
-        
-        consenters_block = ""
-        if ord_type == 'bft':
-            consenters_block = self._build_smart_bft_consenters(domain)
-        else:
-            consenters_block = self._build_raft_consenters(domain)
 
-        bootstrap_profile = None
         bootstrap_channel = None
+        bootstrap_profile = None
         for cc in channels:
             if len(cc.get('participating_orgs', [])) == len(orgs):
                 bootstrap_channel = cc['name']  # pega o primeiro com todas as orgs para bootstrap
@@ -182,12 +187,13 @@ Channel: &ChannelDefaults
 
         if not bootstrap_channel:
             raise Exception("Nenhum canal de bootstrap encontrado. É necessário um canal que inclua todas as organizações.")
-                
+
+
         yaml_content += f"  {bootstrap_profile}:\n"
         yaml_content += "    <<: *ChannelDefaults\n"
         yaml_content += "    Orderer:\n"
         yaml_content += "      <<: *OrdererDefaults\n"
-        yaml_content += consenters_block
+
         yaml_content += "      Organizations:\n"
         yaml_content += "        - *OrdererOrg\n"
         yaml_content += "      Capabilities: *OrdererCapabilities\n"
@@ -213,7 +219,7 @@ Channel: &ChannelDefaults
             
             yaml_content += "    Orderer:\n"
             yaml_content += "      <<: *OrdererDefaults\n"
-            yaml_content += consenters_block # reusa a configuracao de consenso
+
             yaml_content += "      Organizations:\n"
             yaml_content += "        - *OrdererOrg\n"
             yaml_content += "      Capabilities: *OrdererCapabilities\n"
@@ -232,34 +238,54 @@ Channel: &ChannelDefaults
 
     # ------------ HELPERS (Raft/BFT/Endpoints) ------------
     def _build_raft_consenters(self, domain):
-        content = "      EtcdRaft:\n"
-        content += "        Consenters:\n"
+        content = "  EtcdRaft:\n"
+        content += "    Consenters:\n"
+
         for node in self.config['network_topology']['orderer']['nodes']:
             host = f"{node['name']}.{domain}"
             port = node['port']
             server_tls = f"organizations/ordererOrganizations/{domain}/orderers/{host}/tls/server.crt"
-            content += f"          - Host: {host}\n"
-            content += f"            Port: {port}\n"
-            content += f"            ClientTLSCert: {server_tls}\n"
-            content += f"            ServerTLSCert: {server_tls}\n"
+            content += f"      - Host: {host}\n"
+            content += f"        Port: {port}\n"
+            content += f"        ClientTLSCert: {server_tls}\n"
+            content += f"        ServerTLSCert: {server_tls}\n"
         return content
 
     def _build_smart_bft_consenters(self, domain):
-        content = "      SmartBFT:\n"
-        content += "        Consenters:\n"
-        for node in self.config['network_topology']['orderer']['nodes']:
+        content = "  SmartBFT:\n"
+        content += "    RequestBatchMaxInterval: 200ms\n"
+        content += "    RequestForwardTimeout: 2s\n"
+        content += "    RequestComplainTimeout: 20s\n"
+        content += "    RequestAutoRemoveTimeout: 3m0s\n"
+        content += "    ViewChangeResendInterval: 5s\n"
+        content += "    ViewChangeTimeout: 20s\n"
+        content += "    LeaderHeartbeatTimeout: 1m0s\n"
+        content += "    CollectTimeout: 1s\n"
+        content += "    IncomingMessageBufferSize: 200\n"
+        content += "    RequestPoolSize: 100000\n"
+        content += "    LeaderHeartbeatCount: 10\n"
+
+
+        content += "  ConsenterMapping:\n"
+        
+        for idx, node in enumerate(self.config['network_topology']['orderer']['nodes']):
             host = f"{node['name']}.{domain}"
             port = node['port']
+            
             identity_cert = f"organizations/ordererOrganizations/{domain}/orderers/{host}/msp/signcerts/cert.pem"
             server_tls = f"organizations/ordererOrganizations/{domain}/orderers/{host}/tls/server.crt"
-            consenter_id = node.get('consenter_id', node.get('id', 1)) 
-            content += f"          - ConsenterId: {consenter_id}\n"
-            content += f"            Host: {host}\n"
-            content += f"            Port: {port}\n"
-            content += f"            Identity: {identity_cert}\n"
-            content += f"            ClientTLSCert: {server_tls}\n"
-            content += f"            ServerTLSCert: {server_tls}\n"
-            content += f"            MspId: OrdererMSP\n"
+            client_tls = f"organizations/ordererOrganizations/{domain}/orderers/{host}/tls/server.crt"
+            
+            consenter_id = node.get('consenter_id',idx + 1)  
+
+            content += f"    - ID: {consenter_id}\n"
+            content += f"      Host: {host}\n"
+            content += f"      Port: {port}\n"
+            content += f"      MSPID: OrdererMSP\n" 
+            content += f"      Identity: {identity_cert}\n"
+            content += f"      ClientTLSCert: {client_tls}\n"
+            content += f"      ServerTLSCert: {server_tls}\n"
+            
         return content
     
     def _get_orderer_endpoints_list(self):
