@@ -2,7 +2,7 @@
 Rever: futuramente ver a TLS ativa para os CAs e a interface de operações.
 """
 import yaml
-import os
+import shutil
 from ..utils import Colors as co
 
 class ComposeGenerator:
@@ -20,7 +20,7 @@ class ComposeGenerator:
         ca_version = self.config['env_versions']['versions']['fabric_ca']
         network_name = self.config['network_topology']['network']['name']
 
-        # --- 1. CAs das Organizações de Peers ---
+        # --- CAs das Organizações de Peers ---
         for org in orgs:
             ca_config = org['ca']
             org_name = org['name']
@@ -50,14 +50,13 @@ class ComposeGenerator:
                 'networks': [network_name]
             }
 
-        # --- 2. CA do Orderer (NOVO TRECHO) ---
+        # --- CA do Orderer ---
         # Tenta pegar config do yaml ou usa defaults
         ord_ca = orderer_conf.get('ca', {})
         ord_ca_name = ord_ca.get('name', 'ca-orderer')
         ord_ca_port = ord_ca.get('port', 7054)
         
         # Pasta de persistência do Orderer
-        # Nota: Usamos 'ordererOrg' como nome de pasta padrão para a organização do orderer
         ord_org_folder = "ordererOrg" 
         
         services[ord_ca_name] = {
@@ -84,6 +83,7 @@ class ComposeGenerator:
         compose_content = {
             'networks': {
                 network_name: {
+                    'external': True,
                     'name': f"{network_name}_net"
                 }
             },
@@ -97,3 +97,119 @@ class ComposeGenerator:
             yaml.dump(compose_content, f, sort_keys=False)
             
         co.successln(f"Arquivo gerado: {output_path}")
+
+    
+    def generate_nodes_compose(self):
+        try:
+            target_file = self.paths.peer_cfg_dir / "core.yaml"
+            shutil.copy(self.paths.core_yaml_template, target_file)
+            co.successln(f"Arquivo core.yaml copiado para: {target_file}")
+        except Exception as e:
+            co.errorln(f"Erro ao copiar core.yaml: {e}")
+            return
+
+        services = {}
+        orgs = self.config['network_topology']['organizations']
+        orderer_conf = self.config['network_topology']['orderer']
+        domain = self.config['network_topology']['network']['domain']
+        network_name = self.config['network_topology']['network']['name']
+        
+        img_prefix = self.config['env_versions']['images']['org_hyperledger']
+        fabric_version = self.config['env_versions']['versions']['fabric']
+
+        # --- Seção de Orderers ---
+        for node in orderer_conf['nodes']:
+            full_name = f"{node['name']}.{domain}"
+            services[full_name] = {
+                'container_name': full_name,
+                'image': f"{img_prefix}/fabric-orderer:{fabric_version}",
+                'labels': {'service': 'hyperledger-fabric'},
+                'environment': [
+                    "FABRIC_LOGGING_SPEC=INFO",
+                    "ORDERER_GENERAL_LISTENADDRESS=0.0.0.0",
+                    f"ORDERER_GENERAL_LISTENPORT={node['port']}",
+                    "ORDERER_GENERAL_LOCALMSPID=OrdererMSP",
+                    "ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp",
+                    "ORDERER_GENERAL_BOOTSTRAPMETHOD=none",
+                    "ORDERER_CHANNELPARTICIPATION_ENABLED=true",
+                    "ORDERER_GENERAL_TLS_ENABLED=true",
+                    f"ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key",
+                    f"ORDERER_GENERAL_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt",
+                    f"ORDERER_GENERAL_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]",
+                    f"ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=/var/hyperledger/orderer/tls/server.crt",
+                    f"ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=/var/hyperledger/orderer/tls/server.key",
+                    f"ORDERER_GENERAL_CLUSTER_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]",
+                    "ORDERER_ADMIN_TLS_ENABLED=true",
+                    f"ORDERER_ADMIN_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt",
+                    f"ORDERER_ADMIN_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key",
+                    f"ORDERER_ADMIN_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]",
+                    f"ORDERER_ADMIN_TLS_CLIENTROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]",
+                    f"ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:{node['admin_port']}",
+                ],
+                'working_dir': '/root',
+                'command': 'orderer',
+                'volumes': [
+                    f"../organizations/ordererOrganizations/{domain}/orderers/{full_name}/msp:/var/hyperledger/orderer/msp",
+                    f"../organizations/ordererOrganizations/{domain}/orderers/{full_name}/tls/:/var/hyperledger/orderer/tls",
+                    f"{full_name}:/var/hyperledger/production/orderer"
+                ],
+                'ports': [
+                    f"{node['port']}:{node['port']}",
+                    f"{node['admin_port']}:{node['admin_port']}"
+                ],
+                'networks': [network_name]
+            }
+
+        # --- Seção de Peers ---
+        for org in orgs:
+            for peer in org['peers']:
+                p_full = f"{peer['name']}.{org['name']}.{domain}"
+                services[p_full] = {
+                    'container_name': p_full,
+                    'image': f"{img_prefix}/fabric-peer:{fabric_version}",
+                    'labels': {'service': 'hyperledger-fabric'},
+                    'environment': [
+                        "FABRIC_CFG_PATH=/etc/hyperledger/peercfg",
+                        "FABRIC_LOGGING_SPEC=INFO",
+                        "CORE_PEER_TLS_ENABLED=true",
+                        "CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt",
+                        "CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key",
+                        "CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt",
+                        f"CORE_PEER_ID={p_full}",
+                        f"CORE_PEER_ADDRESS={p_full}:{peer['port']}",
+                        f"CORE_PEER_LISTENADDRESS=0.0.0.0:{peer['port']}",
+                        f"CORE_PEER_CHAINCODEADDRESS={p_full}:{peer['chaincode_port']}",
+                        f"CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:{peer['chaincode_port']}",
+                        f"CORE_PEER_GOSSIP_EXTERNALENDPOINT={p_full}:{peer['port']}",
+                        f"CORE_PEER_GOSSIP_BOOTSTRAP={p_full}:{peer['port']}",
+                        f"CORE_PEER_LOCALMSPID={org['msp_id']}",
+                        "CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp",
+                    ],
+                    'volumes': [
+                        "/var/run/docker.sock:/host/var/run/docker.sock",
+                        "./peercfg:/etc/hyperledger/peercfg", 
+                        f"../organizations/peerOrganizations/{org['name']}.{domain}/peers/{p_full}:/etc/hyperledger/fabric",
+                        f"{p_full}:/var/hyperledger/production"
+                    ],
+                    'ports': [f"{peer['port']}:{peer['port']}"],
+                    'networks': [network_name], 
+                    'command': 'peer node start'
+                }
+
+        # Composição final
+        compose_dict = {
+            'version': '3.7',
+            'networks': {network_name: {
+                'external': True,
+                'name': f"{network_name}_net"}
+            },
+            'volumes': {name: None for name in services.keys()},
+            'services': services
+        }
+        
+        # Salva o arquivo
+        output_path = self.compose_dir / "compose-nodes.yaml"
+        with open(output_path, 'w') as f:
+            yaml.dump(compose_dict, f, sort_keys=False)
+        co.successln(f"Arquivo de nós gerado: {output_path}")
+        
