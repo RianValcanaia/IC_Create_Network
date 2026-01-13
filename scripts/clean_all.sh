@@ -1,4 +1,5 @@
 #!/bin/bash
+# Estatico
 
 source $(dirname "$0")/utils.sh
 
@@ -47,6 +48,20 @@ else
     warnln "Arquivo $CA_COMPOSE não encontrado. Pulando etapa de shutdown do Docker."
 fi
 
+# docker compose down
+NODE_COMPOSE="$PROJECT_ROOT/network/compose/compose-nodes.yaml"
+if [ -f "$NODE_COMPOSE" ]; then
+    infoln "Encontrado compose-nodes.yaml. Derrubando containers..."
+    docker-compose -f "$NODE_COMPOSE" -p "fabric_network" down --volumes --remove-orphans
+    if [ $? -eq 0 ]; then
+        successln "Containers e volumes removidos com sucesso."
+    else
+        errorln "Falha ao executar docker-compose down. Pode haver resíduos."
+    fi
+else
+    warnln "Arquivo $NODE_COMPOSE não encontrado. Pulando etapa de shutdown do Docker."
+fi
+
 # limpa a pasta network/ (organizations, compose, genesis block)
 if [ -d "$PROJECT_ROOT/network" ]; then
     infoln "Removendo conteúdo gerado em network/..."
@@ -63,3 +78,16 @@ else
 fi
 
 successln "Limpeza concluída!"
+
+# Remove Docker network criada
+successln "Limpeza concluída!"
+NETWORK_BASE=$(yq -r '.network.name' $PROJECT_ROOT/config/network.yaml)
+NETWORK_NAME="${NETWORK_BASE}_net"
+
+if docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
+    infoln "Removendo Docker network $NETWORK_NAME..."
+    docker network rm "$NETWORK_NAME"
+    successln "Network $NETWORK_NAME removida."
+else
+    warnln "Docker network $NETWORK_NAME não existe."
+fi
