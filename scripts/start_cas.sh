@@ -1,4 +1,5 @@
 #!/bin/bash
+# estatico
 
 source $(dirname "$0")/utils.sh
 
@@ -16,10 +17,14 @@ if [ ! -f "$COMPOSE_FILE" ]; then
     exit 1
 fi
 
+# criar a network, como este eh o primeiro docker-compose criamos aqui mesmo
+NETWORK_BASE=$(yq -r '.network.name' $NETWORK_DIR/../config/network.yaml)
+infoln "Criando a network ${NETWORK_BASE}_net"
+docker network create "${NETWORK_BASE}_net"
+
 # executa o docker compose
 infoln "Subindo containers..."
-
-docker-compose -f "$COMPOSE_FILE" -p "fabric_network" up -d
+docker-compose -f "$COMPOSE_FILE" -p "fabric_ca" up -d
 
 if [ $? -ne 0 ]; then
     errorln "Falha ao executar docker-compose up."
