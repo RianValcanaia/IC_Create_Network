@@ -1,4 +1,5 @@
 #!/bin/bash
+# Estatico
 
 source $(dirname "$0")/utils.sh
 
@@ -84,7 +85,6 @@ fi
 CONFIG_DIR="$PROJECT_ROOT/config"
 
 remove_if_exists "$CONFIG_DIR/configtx.yaml"
-remove_if_exists "$CONFIG_DIR/core.yaml"
 remove_if_exists "$CONFIG_DIR/orderer.yaml"
 
 successln "--- Check Finalizado ---"
