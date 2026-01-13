@@ -80,9 +80,9 @@ class ConfigTxGenerator:
         return """
 Capabilities:
   Channel: &ChannelCapabilities
-    V3_0: true
+    V2_0: true
   Orderer: &OrdererCapabilities
-    V3_0: true
+    V2_0: true
   Application: &ApplicationCapabilities
     V2_5: true"""
 
