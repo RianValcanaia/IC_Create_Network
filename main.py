@@ -7,6 +7,7 @@ from src.utils import Colors as co
 from src.generator.compose import ComposeGenerator 
 from src.generator.crypto import CryptoGenerator 
 from src.generator.configtx import ConfigTxGenerator
+from src.generator.channel import ChannelScriptGenerator
 
 def _verifica_prerequisitos(controller):
     try:
@@ -58,6 +59,26 @@ def _cria_artefatos(controller, config, paths):
         co.errorln(f"\n Erro ao rodar 'create_artifacts.sh': {e}")
         return
 
+def _inicializa_nos(controller, config, paths):
+    compose_generator = ComposeGenerator(config, paths)
+    compose_generator.generate_nodes_compose()
+
+    try:
+        controller.run_script("start_nodes.sh")
+    except Exception as e:
+        co.errorln(f"\n Erro ao rodar 'start_nodes.sh': {e}")
+        return
+    
+def _configura_canais(controller, config, paths):
+    channel_gen = ChannelScriptGenerator(config, paths)
+    channel_gen.generate_channel_script()
+
+    try:
+        controller.run_script("create_channel.sh")
+    except Exception as e:
+        co.errorln(f"\n Erro ao rodar 'create_channel.sh': {e}")
+        return
+
 def network_up(controller, config, paths):
     # ------------- Preparando o ambiente --------------
     co.infoln("Iniciando a rede")
@@ -75,6 +96,10 @@ def network_up(controller, config, paths):
     _register_enroll(controller, config, paths)
     co.infoln("Gerando artefatos da rede (configtx.yaml, blocos, canais, etc)")
     _cria_artefatos(controller, config, paths)
+    co.infoln("Gerando arquivos docker-compose para peers e orderers")
+    _inicializa_nos(controller, config, paths)
+    co.infoln("Configurando canais e fazendo peers entrarem neles")
+    _configura_canais(controller, config, paths)
 
 def clean_files(controller, op = 1):
     try:
