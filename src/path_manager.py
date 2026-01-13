@@ -24,6 +24,9 @@ class PathManager:
         # Arquivo de config
         self.network_yaml = self.config_dir / "network.yaml"
 
+        self.core_yaml_template = self.config_dir / "core.yaml"
+        self.peer_cfg_dir = self.network_dir / "compose" / "peercfg"
+
     def get_paths(self):
         """Retorna um dicionário com todos os caminhos convertidos para string"""
         return {
@@ -36,7 +39,7 @@ class PathManager:
 
     def ensure_network_dirs(self):
         """Cria a estrutura de pastas dentro de network/ se não existir"""
-        subdirs = ["organizations", "channel-artifacts", "docker"]
+        subdirs = ["organizations", "channel-artifacts", "docker", "compose/peercfg"]
         for sub in subdirs:
             (self.network_dir / sub).mkdir(parents=True, exist_ok=True)
 
