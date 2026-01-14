@@ -124,6 +124,7 @@ chaincodes:
     version: "1.0"
     sequence: 1         # versão logica do chaincode
     endorsement_policy: "OR('Org1MSP.peer', 'Org2MSP.peer')"   # quem precisa aprovar a instalação do chaincode
+    # definição de colecoes privadas
     pdc: 
       - name: "collectionPrivate"
         policy: "OR('Org1MSP.member')"
