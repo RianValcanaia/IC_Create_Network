@@ -8,6 +8,7 @@ from src.generator.compose import ComposeGenerator
 from src.generator.crypto import CryptoGenerator 
 from src.generator.configtx import ConfigTxGenerator
 from src.generator.channel import ChannelScriptGenerator
+from src.generator.deploy import ChaincodeDeployGenerator
 
 def _verifica_prerequisitos(controller):
     try:
@@ -79,6 +80,17 @@ def _configura_canais(controller, config, paths):
         co.errorln(f"\n Erro ao rodar 'create_channel.sh': {e}")
         return
 
+def _deploy_chaincode(controller, config, paths):
+    deploy_gen = ChaincodeDeployGenerator(config, paths)
+    deploy_gen.generate()
+
+    try:
+        controller.run_script("deploy_chaincode.sh")
+    except Exception as e:
+        co.errorln(f"\n Erro ao rodar 'deploy_chaincode.sh': {e}")
+        return
+
+
 def network_up(controller, config, paths):
     # ------------- Preparando o ambiente --------------
     co.infoln("Iniciando a rede")
@@ -100,6 +112,8 @@ def network_up(controller, config, paths):
     _inicializa_nos(controller, config, paths)
     co.infoln("Configurando canais e fazendo peers entrarem neles")
     _configura_canais(controller, config, paths)
+    co.infoln("Fazendo deploy de chaincodes")
+    _deploy_chaincode(controller, config, paths)
 
 def clean_files(controller, op = 1):
     try:
