@@ -20,6 +20,7 @@ class PathManager:
         self.scripts_dir = self.base_dir / "scripts"
         self.templates_dir = self.base_dir / "template"
         self.versions_yaml = self.config_dir / "versions.yaml"
+        self.chaincode_dir = self.base_dir / "chaincode"
         
         # Arquivo de config
         self.network_yaml = self.config_dir / "network.yaml"
