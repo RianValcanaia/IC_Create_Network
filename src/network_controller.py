@@ -8,12 +8,18 @@ sistema de arquivos e executando subprocessos para criação e limpeza da rede.
 
 import os
 import subprocess
+from pathlib import Path
 from .utils import Colors as co
 
 class NetworkController:
-    def __init__(self, config, paths):
+    def __init__(self, config, paths, log_to_file=False):
         self.config = config
-        self.paths = paths # Instância do PathManager
+        self.paths = paths 
+        self.log_to_file = log_to_file
+
+        if self.log_to_file:
+            self.log_dir = Path(self.paths.network_dir) / "logs"
+            self.log_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_env_vars(self):
         """Converte as configurações de versão em variáveis de ambiente"""
@@ -36,30 +42,42 @@ class NetworkController:
 
     def run_script(self, script_name, extra_env=None):
         script_path = os.path.join(self.paths.scripts_dir, script_name)
-        
-        # 1. Carrega variáveis base do sistema
         env = os.environ.copy()
-        
-        # 2. Injeta variáveis de versão (Carregadas do YAML)
         env.update(self._get_env_vars())
-        
-        # 3. Injeta o caminho da pasta network (Do PathManager)
         env["NETWORK_DIR"] = str(self.paths.network_dir)
-
-        # 4. Injeta variáveis extras específicas da chamada
+        
         if extra_env:
             env.update(extra_env)
 
-        co.infoln(f"Executando {script_name} (Fabric v{env['FABRIC_VERSION']})...")
-        try:
-            # check true garante erro se o script falhar
-            subprocess.run(["bash", script_path], check=True, env=env)
-        except subprocess.CalledProcessError as e:
-            co.errorln(f"Erro ao executar {script_name}: {e}")
-            raise
+        if self.log_to_file:
+            log_file_path = self.log_dir / f"{script_name}.log"
+            co.infoln(f"Executando {script_name}... (Logs em {log_file_path})")
+
+            try:
+                with open(log_file_path, "w") as log_file:
+                    subprocess.run(
+                        ["bash", script_path], 
+                        check=True, 
+                        env=env,
+                        stdout=log_file, 
+                        stderr=log_file  
+                    )
+                    co.successln(f"Concluido {script_name} com sucesso.")
+            except subprocess.CalledProcessError as e:
+                co.errorln(f"Erro ao executar {script_name}: {e}")
+                raise
+        else:
+            co.infoln(f"Executando {script_name} (Modo Verboso)...")
+            try:
+                subprocess.run(
+                    ["bash", script_path], 
+                    check=True, 
+                    env=env
+                )
+                co.successln(f"Concluido {script_name} com sucesso.")
+            except subprocess.CalledProcessError as e:
+                co.errorln(f"Erro ao executar {script_name}: {e}")
+                raise
 
     def prepare_environment(self):
-        # Cria as pastas necessárias
         self.paths.ensure_network_dirs()
-        # Poderia chamar um script de limpeza aqui também
-        # self._run_script("00_cleanup.sh")
