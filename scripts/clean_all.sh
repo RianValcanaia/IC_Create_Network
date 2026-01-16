@@ -31,6 +31,9 @@ SCRIPTS_DIR="$PROJECT_ROOT/scripts"
 
 remove_if_exists "$SCRIPTS_DIR/register_enroll.sh"
 remove_if_exists "$SCRIPTS_DIR/create_artifacts.sh"
+remove_if_exists "$SCRIPTS_DIR/create_channel.sh"
+remove_if_exists "$SCRIPTS_DIR/deploy_chaincode.sh"
+
 
 infoln "Removendo arquivos docker-compose gerados..."
 
