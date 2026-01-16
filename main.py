@@ -1,3 +1,6 @@
+import argparse
+import time
+
 from src.path_manager import PathManager
 from src.config_loader import ConfigLoader
 from src.network_controller import NetworkController
@@ -91,13 +94,18 @@ def _deploy_chaincode(controller, config, paths):
         return
 
 
-def network_up(controller, config, paths):
+def _network_up(controller, config, paths):
     # ------------- Preparando o ambiente --------------
     co.infoln("Iniciando a rede")
     co.infoln("Verificando pré-requisitos do sistema")
     _verifica_prerequisitos(controller)
     co.infoln("Validando configurações do arquivo network.yaml")
     _valida_configuracoes(config)
+
+    pkg_id_file = paths.network_dir / "CC_PACKAGE_ID"
+    if not pkg_id_file.exists():
+        pkg_id_file.touch()
+
     co.infoln("Gerando arquivos docker-compose para ca")
     _cria_compose_ca(config, paths)
 
@@ -110,12 +118,14 @@ def network_up(controller, config, paths):
     _cria_artefatos(controller, config, paths)
     co.infoln("Gerando arquivos docker-compose para peers e orderers")
     _inicializa_nos(controller, config, paths)
+    co.infoln("Aguardando inicialização completa dos containers...")
+    time.sleep(10) 
     co.infoln("Configurando canais e fazendo peers entrarem neles")
     _configura_canais(controller, config, paths)
     co.infoln("Fazendo deploy de chaincodes")
     _deploy_chaincode(controller, config, paths)
 
-def clean_files(controller, op = 1):
+def _clean_files(controller, op = 1):
     try:
         if op == 1:
             controller.run_script("clean_all.sh")
@@ -126,6 +136,27 @@ def clean_files(controller, op = 1):
         return
 
 def main():
+    parser = argparse.ArgumentParser(description="Hyperledger Fabric Network Generator")
+    parser.add_argument(
+        "--log", 
+        action="store_true", 
+        help="Salva a saída dos scripts em arquivos de log em network/logs/ em vez de mostrar no terminal."
+    )
+
+    parser.add_argument(
+        "--clean", 
+        choices=["all", "net"], 
+        help="Executa a limpeza da rede. 'all' remove tudo (incluindo binários), 'net' limpa apenas a infraestrutura atual."
+    )
+    
+    parser.add_argument(
+        "--up", 
+        action="store_true", 
+        help="Inicia o processo completo de subida da rede (network_up)."
+    )
+
+    args = parser.parse_args()
+
     try:
         # configura caminhos
         paths = PathManager()
@@ -135,11 +166,22 @@ def main():
         config = loader.load()
 
         # inicializa controller da rede
-        controller = NetworkController(config, paths)
+        controller = NetworkController(config, paths, log_to_file=args.log)
         paths.ensure_network_dirs()
-        
-        # network_up(controller, config, paths)
-        clean_files(controller)
+
+        # Executa em modo limpeza
+        if args.clean:
+            op_code = 1 if args.clean == "all" else 0
+            co.infoln(f"Executando limpeza modo: {args.clean}")
+            _clean_files(controller, op=op_code)
+
+        # Sobe a rede
+        if args.up:
+            _network_up(controller, config, paths)
+
+        if not args.clean and not args.up:
+            parser.print_help()
+
     except Exception as e:
         co.errorln(f"{e}")
         exit(1)
