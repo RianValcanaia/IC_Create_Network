@@ -34,7 +34,7 @@ class ConfigParser:
         self._valida_orderer()
         self._valida_canais()       
         # ainda não implementei o chaincode, futuramente preciso ver isso
-        # self._valida_chaincodes()   
+        self._valida_chaincodes()   
 
         return self._print_results()
 
