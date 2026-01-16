@@ -98,12 +98,10 @@ class ComposeGenerator:
             
         co.successln(f"Arquivo gerado: {output_path}")
 
-    
     def generate_nodes_compose(self):
         try:
             target_file = self.paths.peer_cfg_dir / "core.yaml"
             shutil.copy(self.paths.core_yaml_template, target_file)
-            co.successln(f"Arquivo core.yaml copiado para: {target_file}")
         except Exception as e:
             co.errorln(f"Erro ao copiar core.yaml: {e}")
             return
@@ -113,7 +111,6 @@ class ComposeGenerator:
         orderer_conf = self.config['network_topology']['orderer']
         domain = self.config['network_topology']['network']['domain']
         network_name = self.config['network_topology']['network']['name']
-        
         img_prefix = self.config['env_versions']['images']['org_hyperledger']
         fabric_version = self.config['env_versions']['versions']['fabric']
 
@@ -133,16 +130,13 @@ class ComposeGenerator:
                     "ORDERER_GENERAL_BOOTSTRAPMETHOD=none",
                     "ORDERER_CHANNELPARTICIPATION_ENABLED=true",
                     "ORDERER_GENERAL_TLS_ENABLED=true",
-                    f"ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key",
-                    f"ORDERER_GENERAL_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt",
-                    f"ORDERER_GENERAL_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]",
-                    f"ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=/var/hyperledger/orderer/tls/server.crt",
-                    f"ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=/var/hyperledger/orderer/tls/server.key",
-                    f"ORDERER_GENERAL_CLUSTER_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]",
+                    "ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key",
+                    "ORDERER_GENERAL_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt",
+                    "ORDERER_GENERAL_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]",
                     "ORDERER_ADMIN_TLS_ENABLED=true",
-                    f"ORDERER_ADMIN_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt",
-                    f"ORDERER_ADMIN_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key",
-                    f"ORDERER_ADMIN_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]",
+                    "ORDERER_ADMIN_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt",
+                    "ORDERER_ADMIN_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key",
+                    "ORDERER_ADMIN_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]",
                     f"ORDERER_ADMIN_TLS_CLIENTROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]",
                     f"ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:{node['admin_port']}",
                 ],
@@ -195,6 +189,26 @@ class ComposeGenerator:
                     'networks': [network_name], 
                     'command': 'peer node start'
                 }
+
+        for cc in self.config['network_topology'].get('chaincodes', []):
+            cc_service = f"{cc['name']}.{cc['channel']}"
+            services[cc_service] = {
+                'container_name': cc_service,
+                'image': f"{img_prefix}/fabric-ccenv:{fabric_version}",
+                'environment': [
+                    "CHAINCODE_SERVER_ADDRESS=0.0.0.0:9999",
+                    "CHAINCODE_ID_FILE=/var/hyperledger/CC_PACKAGE_ID",
+                    "CHAINCODE_ID={{.CC_ID}}",
+                ],
+                'volumes': [
+                    "/var/run/docker.sock:/var/run/docker.sock",
+                    f"../../chaincode/{cc['name']}:/opt/gopath/src/chaincode",
+                    f"../../network/CC_PACKAGE_ID:/var/hyperledger/CC_PACKAGE_ID"
+                ],
+                'networks': [network_name],
+                'working_dir': '/opt/gopath/src/chaincode',
+                'command': 'sh -c "go mod tidy && go build -o chaincode && ./chaincode"'
+            }
 
         # Composição final
         compose_dict = {
