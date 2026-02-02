@@ -1,5 +1,9 @@
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
 """
-Se futuramente der erro em alguma url do fabric-ca-client, verifique as linhas onde é usado scape na url (//:\\/\\//)
+Gera o script register_enroll.sh, que automatiza a criação de identidades 
+digitais na rede. Ele gerencia o processo de bootstrap do administrador da CA, 
+o registro e a matrícula (enrollment) de peers, usuários e administradores de 
+organizações utilizando o fabric-ca-client.
 """
 import os
 import stat
@@ -19,7 +23,7 @@ class CryptoGenerator:
         
         linhas = []
         
-        # Cabecalho do Script Bash
+        # cabecalho do Script Bash
         linhas.append("#!/bin/bash")
         linhas.append("set -e") 
         linhas.append(f"source {self.paths.scripts_dir}/utils.sh")
@@ -73,14 +77,12 @@ command -v fabric-ca-client >/dev/null || {
                 p_pass = f"{p_name}pw"
                 
                 # chamada da funcaoo bash modular
-                # Args: Nome, Senha, URL_CA, CA_Name, Host_Full, Org_Base_Dir
                 linhas.append(f"registerAndEnrollPeer '{p_name}' '{p_pass}' 'http://localhost:{ca_port}' '{ca_name}' '{p_full}' '{org_base_dir}'")
 
             # registrar e matricular admin da org
             admin_name = f"{org_name}admin"
             admin_pass = f"{org_name}adminpw"
             
-            # Args: User, Pass, URL_CA, CA_Name, Org_Base_Dir, Full_Identity_String
             linhas.append(f"registerAndEnrollOrgAdmin '{admin_name}' '{admin_pass}' 'http://localhost:{ca_port}' '{ca_name}' '{org_base_dir}' 'Admin@{org_name}.{domain}'")
 
             # finalizar MSP da org (copiar certs públicos)
@@ -125,6 +127,10 @@ command -v fabric-ca-client >/dev/null || {
 
         linhas.append('\nsuccessln "Todas as identidades foram geradas com sucesso!"')
 
+        org_base_dir = f"{self.paths.network_dir}/organizations"
+        linhas.append(f"\ninfoln 'Corrigindo permissões da pasta organizations...'")
+        linhas.append(f"fix_permissions '{org_base_dir}'")
+        
         # Salva o arquivo e dá permissão de execução
         with open(self.script_saida, 'w') as f:
             f.write("\n".join(linhas))

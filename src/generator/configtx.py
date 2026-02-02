@@ -1,3 +1,10 @@
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
+"""
+Responsável por gerar o arquivo de configuração configtx.yaml 
+(contendo definições de organizações, capacidades e perfis de canais) 
+e o script shell create_artifacts.sh. Este último é utilizado para 
+criar o bloco gênese e os blocos de configuração dos canais via configtxgen.
+"""
 import os
 import stat
 from ..utils import Colors as co
@@ -130,8 +137,6 @@ Application: &ApplicationDefaults
         yaml_content = "Orderer: &OrdererDefaults\n"
         yaml_content += f"  OrdererType: {ord_type}\n"
         yaml_content += "  Addresses:\n"
-        # for ep in self._get_orderer_endpoints_list():
-        #     yaml_content += f"    - {ep}\n"
             
         yaml_content += f"  BatchTimeout: {batch_timeout}\n"
         yaml_content += "  BatchSize:\n"
@@ -324,7 +329,7 @@ Channel: &ChannelDefaults
         linhas.append('infoln "--- Gerando Blocos de Configuração (Fabric v3) ---"')
         linhas.append(f"mkdir -p {output}")
         
-        # Genesis Block, para o canal de bootstrap
+        # genesis Block, para o canal de bootstrap
         cmd_genesis = (
             f"configtxgen -profile {bootstrap_profile} "
             f"-channelID {bootstrap_channel} "
