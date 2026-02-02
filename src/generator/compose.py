@@ -1,4 +1,11 @@
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
 """
+Gerador dos arquivos de orquestração Docker Compose 
+(compose-ca.yaml e compose-nodes.yaml). Ele define 
+as imagens, variáveis de ambiente, volumes e redes 
+necessárias para rodar as Autoridades Certificadoras 
+(CAs), Peers e Orderers.
+
 Rever: futuramente ver a TLS ativa para os CAs e a interface de operações.
 """
 import yaml
@@ -114,7 +121,7 @@ class ComposeGenerator:
         img_prefix = self.config['env_versions']['images']['org_hyperledger']
         fabric_version = self.config['env_versions']['versions']['fabric']
 
-        # --- Seção de Orderers ---
+        # --- seção de Orderers ---
         for node in orderer_conf['nodes']:
             full_name = f"{node['name']}.{domain}"
             services[full_name] = {
@@ -154,10 +161,18 @@ class ComposeGenerator:
                 'networks': [network_name]
             }
 
-        # --- Seção de Peers ---
+        # --- seção de Peers ---
         for org in orgs:
-            for peer in org['peers']:
+            peer_addresses = [f"{p['name']}.{org['name']}.{domain}:{p['port']}" for p in org['peers']]
+
+            for idx, peer in enumerate(org['peers']):
                 p_full = f"{peer['name']}.{org['name']}.{domain}"
+
+                if len(peer_addresses) > 1:
+                    bootstrap_peer = peer_addresses[1] if idx == 0 else peer_addresses[0]
+                else :
+                    bootstrap_peer = peer_addresses[0]
+
                 services[p_full] = {
                     'container_name': p_full,
                     'image': f"{img_prefix}/fabric-peer:{fabric_version}",
@@ -175,7 +190,7 @@ class ComposeGenerator:
                         f"CORE_PEER_CHAINCODEADDRESS={p_full}:{peer['chaincode_port']}",
                         f"CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:{peer['chaincode_port']}",
                         f"CORE_PEER_GOSSIP_EXTERNALENDPOINT={p_full}:{peer['port']}",
-                        f"CORE_PEER_GOSSIP_BOOTSTRAP={p_full}:{peer['port']}",
+                        f"CORE_PEER_GOSSIP_BOOTSTRAP={bootstrap_peer}",
                         f"CORE_PEER_LOCALMSPID={org['msp_id']}",
                         "CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp",
                     ],
@@ -183,34 +198,15 @@ class ComposeGenerator:
                         "/var/run/docker.sock:/host/var/run/docker.sock",
                         "./peercfg:/etc/hyperledger/peercfg", 
                         f"../organizations/peerOrganizations/{org['name']}.{domain}/peers/{p_full}:/etc/hyperledger/fabric",
-                        f"{p_full}:/var/hyperledger/production"
+                        f"{p_full}:/var/hyperledger/production",
+                        f"../../builders/ccaas:/opt/hyperledger/ccaas_builder"
                     ],
                     'ports': [f"{peer['port']}:{peer['port']}"],
                     'networks': [network_name], 
                     'command': 'peer node start'
                 }
-
-        for cc in self.config['network_topology'].get('chaincodes', []):
-            cc_service = f"{cc['name']}.{cc['channel']}"
-            services[cc_service] = {
-                'container_name': cc_service,
-                'image': f"{img_prefix}/fabric-ccenv:{fabric_version}",
-                'environment': [
-                    "CHAINCODE_SERVER_ADDRESS=0.0.0.0:9999",
-                    "CHAINCODE_ID_FILE=/var/hyperledger/CC_PACKAGE_ID",
-                    "CHAINCODE_ID={{.CC_ID}}",
-                ],
-                'volumes': [
-                    "/var/run/docker.sock:/var/run/docker.sock",
-                    f"../../chaincode/{cc['name']}:/opt/gopath/src/chaincode",
-                    f"../../network/CC_PACKAGE_ID:/var/hyperledger/CC_PACKAGE_ID"
-                ],
-                'networks': [network_name],
-                'working_dir': '/opt/gopath/src/chaincode',
-                'command': 'sh -c "go mod tidy && go build -o chaincode && ./chaincode"'
-            }
-
-        # Composição final
+    
+        # composição final
         compose_dict = {
             'version': '3.7',
             'networks': {network_name: {
@@ -221,7 +217,7 @@ class ComposeGenerator:
             'services': services
         }
         
-        # Salva o arquivo
+        # salva o arquivo
         output_path = self.compose_dir / "compose-nodes.yaml"
         with open(output_path, 'w') as f:
             yaml.dump(compose_dict, f, sort_keys=False)
