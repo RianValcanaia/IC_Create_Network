@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
 """
 Utilitários para formatação de saída no terminal (CLI).
 
