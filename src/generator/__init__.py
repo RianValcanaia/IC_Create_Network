@@ -1,0 +1,1 @@
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
