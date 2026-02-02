@@ -1,3 +1,10 @@
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
+"""
+Responsável pela orquestração da entrada dos nós nos canais 
+através do script create_channel.sh. Ele automatiza o uso do 
+osnadmin para o join dos Orderers e do comando peer channel 
+join para que os Peers participem dos canais definidos na topologia.
+"""
 import os
 import stat
 from ..utils import Colors as co
@@ -22,7 +29,7 @@ class ChannelScriptGenerator:
             "infoln '--- Iniciando Configuração de Canais (Fabric v3) ---'"
         ]
 
-        # Variáveis TLS do Orderer para OSNAdmin
+        # variáveis TLS do Orderer para OSNAdmin
         ord_full = f"{orderer_node['name']}.{domain}"
         ord_tls_path = f"{self.paths.network_dir}/organizations/ordererOrganizations/{domain}/orderers/{ord_full}/tls"
         
@@ -36,29 +43,31 @@ class ChannelScriptGenerator:
             
             linhas.append(f"infoln '>> Configurando Canal: {ch_name} <<'")
             
-            # --- Passo A: Orderer Join (API de Participação) ---
-            linhas.append(f"infoln 'Orderer participando do canal {ch_name}...'")
-            cmd_osn = (
-                f"osnadmin channel join --channelID {ch_name} "
-                f"--config-block {block_path} "
-                f"-o localhost:{orderer_node['admin_port']} "
-                f"--ca-file $ORD_CA --client-cert $ORD_ADMIN_CERT --client-key $ORD_ADMIN_KEY"
-            )
-            linhas.append(cmd_osn)
+            for node in self.config['network_topology']['orderer']['nodes']:
+                ord_full = f"{node['name']}.{domain}"
+                
+                cmd_osn = (
+                    f"osnadmin channel join --channelID {ch_name} "
+                    f"--config-block {block_path} "
+                    f"-o localhost:{node['admin_port']} "
+                    f"--ca-file $ORD_CA --client-cert $ORD_ADMIN_CERT --client-key $ORD_ADMIN_KEY"
+                )
+                linhas.append(cmd_osn)
+
             linhas.append("sleep 2") # Aguarda processamento do bloco gênese
             
-            # --- Passo B: Peer Join ---
+            # --- Peer Join ---
             for org_name in ch['participating_orgs']:
                 org_data = next(o for o in self.config['network_topology']['organizations'] if o['name'] == org_name)
                 
-                # Usaremos o primeiro peer da org para ser o Anchor Peer
+                # primeiro peer da org para ser o Anchor Peer
                 first_peer = True 
 
                 for peer in org_data['peers']:
                     p_full = f"{peer['name']}.{org_name}.{domain}"
                     linhas.append(f"\ninfoln 'Peer {p_full} entrando no canal {ch_name}...'")
                     
-                    # Variáveis de ambiente para o Admin da Org controlar o Peer
+                    # variáveis de ambiente para o Admin da Org controlar o Peer
                     peer_base = f"{self.paths.network_dir}/organizations/peerOrganizations/{org_name}.{domain}"
                     admin_msp = f"{peer_base}/users/Admin@{org_name}.{domain}/msp"
                     peer_tls_ca = f"{peer_base}/peers/{p_full}/tls/ca.crt"
@@ -71,7 +80,7 @@ class ChannelScriptGenerator:
                     
                     linhas.append(f"peer channel join -b {block_path}")
 
-                    # --- Passo C: Definir Anchor Peer (Apenas no primeiro peer de cada Org) ---
+                    # --- definir Anchor Peer (Apenas no primeiro peer de cada Org) ---
                     if first_peer:
                         linhas.append(f"infoln 'Definindo {p_full} como Anchor Peer para {org_name}...'")
                         # O comando abaixo é uma simplificação para redes v2.x/v3.x que atualiza o canal
@@ -81,7 +90,7 @@ class ChannelScriptGenerator:
 
         linhas.append("\nsuccessln '--- Configuração de canais concluída com sucesso! ---'")
 
-        # Persistência do script
+        # persistência do script
         with open(self.script_saida, 'w') as f:
             f.write("\n".join(linhas))
         
