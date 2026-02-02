@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
 """
 Carregador de arquivos de configuração YAML.
 
@@ -17,11 +18,11 @@ class ConfigLoader:
         self.full_config = {}
 
     def load(self):
-        # Carerga a topologia da rede
+        # carrega a topologia da rede
         with open(self.network_config_path, 'r') as f:
             self.full_config['network_topology'] = yaml.safe_load(f)
         
-        # Carrega as versões do ambiente    
+        # carrega as versões do ambiente    
         if os.path.exists(self.versions_config_path):
             with open(self.versions_config_path, 'r') as f:
                 self.full_config['env_versions'] = yaml.safe_load(f)
