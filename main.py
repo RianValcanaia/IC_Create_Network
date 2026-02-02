@@ -1,3 +1,10 @@
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
+"""
+O ponto de entrada da aplicação que orquestra todo o fluxo de 
+subida ou limpeza da rede. Ele processa os argumentos de linha 
+de comando (--up, --clean) e chama sequencialmente os validadores 
+e geradores de scripts.
+"""
 import argparse
 import time
 
@@ -163,20 +170,31 @@ def main():
 
         # carregar configuracoes
         loader = ConfigLoader(paths.network_yaml, paths.versions_yaml)
-        config = loader.load()
-
         # inicializa controller da rede
+        config = loader.load()
         controller = NetworkController(config, paths, log_to_file=args.log)
+
         paths.ensure_network_dirs()
 
-        # Executa em modo limpeza
+        # executa em modo limpeza
         if args.clean:
             op_code = 1 if args.clean == "all" else 0
             co.infoln(f"Executando limpeza modo: {args.clean}")
             _clean_files(controller, op=op_code)
 
-        # Sobe a rede
+        # sobe a rede
         if args.up:
+            # configura caminhos
+            paths = PathManager()
+
+            # carregar configuracoes
+            loader = ConfigLoader(paths.network_yaml, paths.versions_yaml)
+            # inicializa controller da rede
+            config = loader.load()
+            controller = NetworkController(config, paths, log_to_file=args.log)
+
+            paths.ensure_network_dirs()
+
             _network_up(controller, config, paths)
 
         if not args.clean and not args.up:
