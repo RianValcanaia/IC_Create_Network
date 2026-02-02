@@ -1,5 +1,6 @@
 #!/bin/bash
-# estatico
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
+# Contém funções auxiliares em shell script para exibição de mensagens coloridas e remoção segura de arquivos.
 
 # Cores ANSI
 RED="\033[0;31m"
@@ -36,4 +37,12 @@ remove_if_exists() {
         rm -f "$file"
         successln "$(basename "$file") removido."
     fi
+}
+
+fix_permissions() {
+    local target_dir=$1
+    USER_ID=$(id -u)
+    GROUP_ID=$(id -g)
+    infoln "Corrigindo permissões em: $target_dir"
+    docker run --rm -v "$target_dir":/data alpine chown -R $USER_ID:$GROUP_ID /data
 }
