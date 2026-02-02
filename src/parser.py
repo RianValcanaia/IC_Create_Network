@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
 """
 Validador sintático e semântico da configuração da rede (network.yaml).
 
@@ -11,17 +12,17 @@ import os
 from .utils import Colors as co
 
 class ConfigParser:
-    # O ConfigLoader retorna um dict com 'network_topology' e 'env_versions'
-    # Estamos interessados apenas na topologia da rede.
+    # o ConfigLoader retorna um dict com 'network_topology' e 'env_versions'
+    # estamos interessados apenas na topologia da rede.
     def __init__(self, config_completa):
         self.topologia = config_completa.get('network_topology', {})
         self.erros = []
         self.avisos = []
         
-        # Cache para validação semântica (nomes das orgs encontradas)
+        # cache para validação semântica (nomes das orgs encontradas)
         self.orgs_definidas = set()
 
-    # Executa todas as verificações. Retorna True se aprovado, False se houver erros.
+    # executa todas as verificações. retorna true se aprovado, false se houver erros.
     def valida(self):
         if not self.topologia:
             self.erros.append("O arquivo network.yaml parece estar vazio ou mal formatado.")
@@ -38,7 +39,7 @@ class ConfigParser:
 
         return self._print_results()
 
-    # Exibe os erros e avisos acumulados.
+    # exibe os erros e avisos acumulados.
     def _print_results(self):
         if self.avisos:
             for a in self.avisos:
@@ -53,7 +54,7 @@ class ConfigParser:
         co.successln("Validação concluída com sucesso. Nenhum erro encontrado.")
         return True
 
-    # Verifica se chaves obrigatórias existem em um dicionário, retorna true se todas existem
+    # verifica se chaves obrigatórias existem em um dicionário, retorna true se todas existem
     def _chaves_obrigatorias(self, dado, chaves_obrigatorias, contexto):
         if not isinstance(dado, dict):
             self.erros.append(f"Em '{contexto}': Esperado um objeto (dict), recebeu {type(dado).__name__}.")
@@ -222,7 +223,7 @@ class ConfigParser:
                 if cc['channel'] not in [ch['name'] for ch in channels]:
                     self.erros.append(f"Chaincode '{cc['name']}' referencia canal '{cc['channel']}' que não foi definido em 'channels'.")
                 
-                # Valida Private Data Collections se houver
+                # valida Private Data Collections se houver
                 if 'pdc' in cc:
                     if not isinstance(cc['pdc'], list):
                         self.erros.append(f"PDC do chaincode '{cc['name']}' deve ser uma lista.")
