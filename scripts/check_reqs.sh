@@ -1,5 +1,7 @@
 #!/bin/bash
-# Estatico
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
+# Verifica se os pré-requisitos do sistema (Docker, Go, binários do Fabric) estão instalados 
+#e em versões compatíveis. Caso necessário, realiza o download automático dos binários do Hyperledger Fabric.
 
 source $(dirname "$0")/utils.sh
 
@@ -84,7 +86,10 @@ fi
 
 CONFIG_DIR="$PROJECT_ROOT/config"
 
-remove_if_exists "$CONFIG_DIR/configtx.yaml"
-remove_if_exists "$CONFIG_DIR/orderer.yaml"
+# Remove apenas o que o Fabric baixou para não poluir
+if [ -d "$CONFIG_DIR" ]; then
+    infoln "Limpando configurações padrão baixadas pelo Fabric..."
+    rm -rf "$CONFIG_DIR"
+fi
 
 successln "--- Check Finalizado ---"

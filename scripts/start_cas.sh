@@ -1,5 +1,6 @@
 #!/bin/bash
-# estatico
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
+# Script responsável por criar a rede Docker e iniciar os containers das Autoridades Certificadoras (CAs), além de corrigir permissões de pastas geradas pelo Docker.
 
 source $(dirname "$0")/utils.sh
 
@@ -18,13 +19,13 @@ if [ ! -f "$COMPOSE_FILE" ]; then
 fi
 
 # criar a network, como este eh o primeiro docker-compose criamos aqui mesmo
-NETWORK_BASE=$(yq -r '.network.name' $NETWORK_DIR/../config/network.yaml)
+NETWORK_BASE=${NETWORK_NAME:-$(yq -r '.network.name' "$NETWORK_DIR/../project_config/network.yaml")}
 infoln "Criando a network ${NETWORK_BASE}_net"
-docker network create "${NETWORK_BASE}_net"
+docker network create "${NETWORK_BASE}_net" || true
 
 # executa o docker compose
 infoln "Subindo containers..."
-docker-compose -f "$COMPOSE_FILE" -p "fabric_ca" up -d
+docker-compose -f "$COMPOSE_FILE" -p "${NETWORK_BASE}_ca" up -d
 
 if [ $? -ne 0 ]; then
     errorln "Falha ao executar docker-compose up."

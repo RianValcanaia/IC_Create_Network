@@ -1,9 +1,13 @@
 #!/bin/bash
-# Estatico
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
+# Executa uma limpeza profunda no ambiente, removendo não apenas a infraestrutura Docker, mas também os binários baixados e as pastas de builders.
 
 source $(dirname "$0")/utils.sh
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+NETWORK_BASE=${NETWORK_NAME:-$(yq -r '.network.name' "$PROJECT_ROOT/project_config/network.yaml")}
+PROJECT_CA="${NETWORK_BASE}_ca"
+PROJECT_NET="${NETWORK_BASE}_net"
 
 infoln "Limpando ambiente no diretório: $PROJECT_ROOT"
 
@@ -41,7 +45,7 @@ infoln "Removendo arquivos docker-compose gerados..."
 CA_COMPOSE="$PROJECT_ROOT/network/compose/compose-ca.yaml"
 if [ -f "$CA_COMPOSE" ]; then
     infoln "Encontrado compose-ca.yaml. Derrubando containers..."
-    docker-compose -f "$CA_COMPOSE" -p "fabric_network" down --volumes --remove-orphans
+    docker-compose -f "$CA_COMPOSE" -p "$PROJECT_CA" down --volumes --remove-orphans
     if [ $? -eq 0 ]; then
         successln "Containers e volumes removidos com sucesso."
     else
@@ -55,7 +59,7 @@ fi
 NODE_COMPOSE="$PROJECT_ROOT/network/compose/compose-nodes.yaml"
 if [ -f "$NODE_COMPOSE" ]; then
     infoln "Encontrado compose-nodes.yaml. Derrubando containers..."
-    docker-compose -f "$NODE_COMPOSE" -p "fabric_network" down --volumes --remove-orphans
+    docker-compose -f "$NODE_COMPOSE" -p "$PROJECT_NET" down --volumes --remove-orphans
     if [ $? -eq 0 ]; then
         successln "Containers e volumes removidos com sucesso."
     else
@@ -69,6 +73,8 @@ fi
 if [ -d "$PROJECT_ROOT/network" ]; then
     infoln "Removendo conteúdo gerado em network/..."
 
+    fix_permissions "$PROJECT_ROOT/network"
+
     # container Alpine temporario para apagar os arquivos.
     docker run --rm -v "$PROJECT_ROOT/network":/data alpine sh -c 'rm -rf /data/*'
     
@@ -80,17 +86,19 @@ else
     warnln "Pasta network/ não existe. Nada a limpar."
 fi
 
-successln "Limpeza concluída!"
+infoln "Limpando containers de Chaincode (CCAAS)..."
+docker ps -a --format '{{.Names}}' | grep -E "\.channel-all|\.channel12" | xargs -I {} docker rm -f {} 2>/dev/null || true
+successln "Containers de chaincode removidos."
 
 # Remove Docker network criada
-successln "Limpeza concluída!"
-NETWORK_BASE=$(yq -r '.network.name' $PROJECT_ROOT/config/network.yaml)
-NETWORK_NAME="${NETWORK_BASE}_net"
 
-if docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
-    infoln "Removendo Docker network $NETWORK_NAME..."
-    docker network rm "$NETWORK_NAME"
-    successln "Network $NETWORK_NAME removida."
+PROJECT_NET="${NETWORK_BASE}_net"
+
+if docker network inspect "$PROJECT_NET" >/dev/null 2>&1; then
+    infoln "Removendo Docker network $PROJECT_NET..."
+    docker network rm "$PROJECT_NET"
+    successln "Network $PROJECT_NET removida."
 else
-    warnln "Docker network $NETWORK_NAME não existe."
+    warnln "Docker network $PROJECT_NET não existe."
 fi
+successln "Limpeza concluída!"
