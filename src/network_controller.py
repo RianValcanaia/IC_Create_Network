@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
 """
 Controlador de execução e orquestração de scripts da rede.
 
@@ -25,11 +26,12 @@ class NetworkController:
         """Converte as configurações de versão em variáveis de ambiente"""
         versions = self.config['env_versions']['versions']
         images = self.config['env_versions']['images']
-        
-        # Caminho absoluto para a pasta bin do projeto
+        network_name = self.config['network_topology']['network']['name']
+
+        # caminho absoluto para a pasta bin do projeto
         project_bin_path = str(self.paths.base_dir / "bin")
         
-        # Pega o PATH atual do sistema
+        # pega o PATH atual do sistema
         system_path = os.environ["PATH"]
 
         return {
@@ -37,6 +39,7 @@ class NetworkController:
             "CA_VERSION": versions['fabric_ca'],
             "GO_VERSION": versions['go'],
             "DOCKER_IMAGE_PREFIX": images['org_hyperledger'],
+            "NETWORK_NAME": network_name,
             "PATH": f"{project_bin_path}:{system_path}"
         }
 
