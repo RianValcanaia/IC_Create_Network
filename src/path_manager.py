@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
 """
 Gerenciador central de caminhos e diretórios do projeto.
 
@@ -11,18 +12,18 @@ from pathlib import Path
 
 class PathManager:
     def __init__(self):
-        # Base do projeto (assumindo que este arquivo está em src/)
+        # base do projeto (assumindo que este arquivo está em src/)
         self.base_dir = Path(__file__).parent.parent.resolve()
         
-        # Caminhos principais
-        self.config_dir = self.base_dir / "config"
+        # caminhos principais
+        self.config_dir = self.base_dir / "project_config"
         self.network_dir = self.base_dir / "network"
         self.scripts_dir = self.base_dir / "scripts"
         self.templates_dir = self.base_dir / "template"
         self.versions_yaml = self.config_dir / "versions.yaml"
         self.chaincode_dir = self.base_dir / "chaincode"
         
-        # Arquivo de config
+        # arquivo de config
         self.network_yaml = self.config_dir / "network.yaml"
 
         self.core_yaml_template = self.config_dir / "core.yaml"
