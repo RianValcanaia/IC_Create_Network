@@ -1,56 +1,80 @@
 #!/bin/bash
 # Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
-# CLI do ledger para pequenos testes 
 
-# USO: ./scripts/ledger_cli.sh Org1 peer0 create asset1 blue 5 Tom 100
+# Uso: ./ledger_cli.sh <Org> <Peer> <action> [args...]
 
+# --- Configurações de Caminho ---
 if [ -n "$ZSH_VERSION" ]; then SCRIPT_PATH="${(%):-%x}"; else SCRIPT_PATH="${BASH_SOURCE[0]}"; fi
 SCRIPT_DIR=$(cd "$(dirname "$SCRIPT_PATH")" && pwd)
 PROJECT_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+CONTEXT_FILE="$PROJECT_ROOT/network/contexto_ativo.json"
 
+# --- Cores para Output ---
+infon() { echo -e "\033[1;34m[INFO]\033[0m $1"; }
+
+# --- Validação de Contexto ---
+if [ ! -f "$CONTEXT_FILE" ]; then
+    echo "Erro: Arquivo contexto_ativo.json não encontrado em $PROJECT_ROOT/network/"
+    exit 1
+fi
+
+# --- Carregar Ambiente do Peer Atual ---
 source "$SCRIPT_DIR/set_env.sh" "$1" "$2"
 if [ $? -ne 0 ]; then exit 1; fi
 
-ACTION=$3
-ID=$4
-
+# --- Variáveis Dinâmicas via JQ ---
+DOMAIN=$(jq -r '.domain' "$CONTEXT_FILE")
 CHANNEL_NAME="channel-all"
 CC_NAME="basic_asset"
-ORDERER_CA="$PROJECT_ROOT/network/organizations/ordererOrganizations/exemplo.com/orderers/orderer0.exemplo.com/tls/ca.crt"
+ORDERER_CA="$PROJECT_ROOT/network/organizations/ordererOrganizations/${DOMAIN}/orderers/orderer0.${DOMAIN}/tls/ca.crt"
 
-PEER_ARGS="--peerAddresses localhost:7051 --tlsRootCertFiles $PROJECT_ROOT/network/organizations/peerOrganizations/Org1.exemplo.com/peers/peer0.Org1.exemplo.com/tls/ca.crt"
-PEER_ARGS="$PEER_ARGS --peerAddresses localhost:9051 --tlsRootCertFiles $PROJECT_ROOT/network/organizations/peerOrganizations/Org2.exemplo.com/peers/peer0.Org2.exemplo.com/tls/ca.crt"
+# --- Função para Montar Flags de Endosso (Dinamismo Puro) ---
+# Esta função percorre todas as Orgs do JSON e pega o primeiro peer de cada uma
+generate_peer_args() {
+    local ARGS=""
+    ORGS=$(jq -r '.orgs | keys[]' "$CONTEXT_FILE")
+    
+    for ORG in $ORGS; do
+        # Pega o primeiro peer da lista desta Org
+        FIRST_PEER=$(jq -r ".orgs[\"$ORG\"].peers | keys[0]" "$CONTEXT_FILE")
+        PORT=$(jq -r ".orgs[\"$ORG\"].peers[\"$FIRST_PEER\"].port" "$CONTEXT_FILE")
+        
+        # Constrói o caminho do certificado TLS
+        TLS_PATH="$PROJECT_ROOT/network/organizations/peerOrganizations/${ORG}.${DOMAIN}/peers/${FIRST_PEER}.${ORG}.${DOMAIN}/tls/ca.crt"
+        
+        ARGS="$ARGS --peerAddresses localhost:${PORT} --tlsRootCertFiles ${TLS_PATH}"
+    done
+    echo "$ARGS"
+}
+
+# --- Preparar Argumentos ---
+ACTION=$3
+ID=$4
+PEER_ARGS=$(generate_peer_args)
 
 case $ACTION in
     init)
-        # ./scripts/ledger_cli.sh Org1 peer0 init
-        infoln "Inicializando Ledger..."
-        peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer0.exemplo.com --tls --cafile "$ORDERER_CA" -C "$CHANNEL_NAME" -n "$CC_NAME" $PEER_ARGS -c '{"function":"InitLedger","Args":[]}'
+        infon "Inicializando Ledger em todas as Orgs..."
+        peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer0.${DOMAIN} --tls --cafile "$ORDERER_CA" -C "$CHANNEL_NAME" -n "$CC_NAME" $PEER_ARGS -c '{"function":"InitLedger","Args":[]}' 
         ;;
     create)
-        # ./scripts/ledger_cli.sh Org1 peer0 create asset10 blue 5 Rian 100
-        # Args: ID, Color, Size, Owner, AppraisedValue
-        infoln "Criando Asset $ID..."
-        peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer0.exemplo.com --tls --cafile "$ORDERER_CA" -C "$CHANNEL_NAME" -n "$CC_NAME" $PEER_ARGS -c "{\"function\":\"CreateAsset\",\"Args\":[\"$ID\",\"$5\",\"$6\",\"$7\",\"$8\"]}"
+        infon "Criando Asset $ID..."
+        peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer0.${DOMAIN} --tls --cafile "$ORDERER_CA" -C "$CHANNEL_NAME" -n "$CC_NAME" $PEER_ARGS -c "{\"function\":\"CreateAsset\",\"Args\":[\"$ID\",\"$5\",\"$6\",\"$7\",\"$8\"]}"
         ;;
     read)
-        # ./scripts/ledger_cli.sh Org1 peer0 read asset10
-        infoln "Lendo Asset $ID..."
+        infon "Lendo Asset $ID (Consulta Local)..."
         peer chaincode query -C "$CHANNEL_NAME" -n "$CC_NAME" -c "{\"function\":\"ReadAsset\",\"Args\":[\"$ID\"]}"
         ;;
     update)
-        # ./scripts/ledger_cli.sh Org1 peer0 update asset10 green 20 Admin 200
-        infoln "Atualizando Asset $ID..."
-        peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer0.exemplo.com --tls --cafile "$ORDERER_CA" -C "$CHANNEL_NAME" -n "$CC_NAME" $PEER_ARGS -c "{\"function\":\"UpdateAsset\",\"Args\":[\"$ID\",\"$5\",\"$6\",\"$7\",\"$8\"]}"
+        infon "Atualizando Asset $ID..."
+        peer chaincode invoke -o localhost:7050 --ordererTLSHostnameOverride orderer0.${DOMAIN} --tls --cafile "$ORDERER_CA" -C "$CHANNEL_NAME" -n "$CC_NAME" $PEER_ARGS -c "{\"function\":\"UpdateAsset\",\"Args\":[\"$ID\",\"$5\",\"$6\",\"$7\",\"$8\"]}"
         ;;
     all)
-        # ./scripts/ledger_cli.sh Org1 peer0 all
-        infoln "Listando todos os Assets..."
+        infon "Listando todos os Assets..."
         peer chaincode query -C "$CHANNEL_NAME" -n "$CC_NAME" -c '{"function":"GetAllAssets","Args":[]}'
         ;;
     *)
         echo "Uso: $0 <Org> <Peer> <action> [args...]"
-        echo "Ações: init, create, read, update, all"
-        echo "Exemplo Create: $0 Org1 peer0 create asset7 green 10 Rian 500"
+        echo "Exemplo: $0 Org1 peer0 create asset7 green 10 Rian 500"
         ;;
 esac

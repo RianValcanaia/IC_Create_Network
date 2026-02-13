@@ -11,27 +11,31 @@ from ..utils import Colors as co
 
 class CryptoGenerator:
     def __init__(self, config, paths):
+        # inicializa as referencias de configuracao 
         self.config = config
         self.paths = paths
         
+        # local de saida do script register_enroll.sh
         self.script_saida = self.paths.scripts_dir / "register_enroll.sh"
 
+    # gera o conteudo do script bash para registro e matricula das identidades
     def generate(self):
+        # extrai informacoes da topologia
         orgs = self.config['network_topology']['organizations']
         orderer_conf = self.config['network_topology']['orderer']
         domain = self.config['network_topology']['network']['domain']
         
         linhas = []
         
-        # cabecalho do Script Bash
+        # -------------------- Configuracao inicial do script bash --------------------
         linhas.append("#!/bin/bash")
         linhas.append("set -e") 
         linhas.append(f"source {self.paths.scripts_dir}/utils.sh")
         
-        # exporta os binarios do Fabric para o PATH
+        # adiciona os binarios do fabric ao PATH para execucao dos comandos ca-client
         linhas.append(f"export PATH={self.paths.base_dir}/bin:$PATH")
         
-        # validacao de pre-requisitos
+        # verifica se o executavel do fabric-ca-cliente está disponivel no sistema
         linhas.append("""
 # Verifica se fabric-ca-clientestá instalado
 command -v fabric-ca-client >/dev/null || {
@@ -39,57 +43,52 @@ command -v fabric-ca-client >/dev/null || {
     exit 1
 }""")
 
-        # inclui funcoes bash auxiliares
+        # insere o bloco de funcoes bash auxliares
         linhas.append(self._get_bash_functions())
 
         linhas.append('infoln "--- Iniciando Geração de Identidades ---"')
 
-        # -------------------- Processa peers das organizações --------------------
+        # -------------------- Processamento peers das organizações --------------------
         for org in orgs:
             org_name = org['name']
             ca_port = org['ca']['port']
             ca_name = org['ca']['name']
             
-            # caminho base
+            # define o diretorio base da organizacao e a home temporaria do cliente CA
             org_base_dir = f"{self.paths.network_dir}/organizations/peerOrganizations/{org_name}.{domain}"
-            
-            # onde o cliente da CA salva as credenciais temporarias do admin
             ca_client_home = f"{self.paths.network_dir}/organizations/fabric-ca/{org_name}/client"
 
             linhas.append(f"\n# --- Organização: {org_name} ---")
             linhas.append(f"infoln 'Processando Organização: {org_name}'")
             
             linhas.append(f"mkdir -p {org_base_dir}")
-            
-            # enroll do admin da CA
             linhas.append(f"mkdir -p {ca_client_home}")
-            linhas.append(f"export FABRIC_CA_CLIENT_HOME={ca_client_home}")
             
+            # define o ambiente de trabalho do CA client para a org
+            linhas.append(f"export FABRIC_CA_CLIENT_HOME={ca_client_home}")
             linhas.append(f"infoln 'Bootstrap Admin CA ({org_name})...'")
 
-            # loga como admin da CA para ter permissao de registrar outros
+            # realiza o enroll do ademir da CA para permitir registro de novos nos
             linhas.append(f"fabric-ca-client enroll -u http://admin:adminpw@localhost:{ca_port} --caname {ca_name}")
 
-            # registrar e matricular peers
+            # registra e matricula peers
             for peer in org['peers']:
                 p_name = peer['name']
                 p_full = f"{p_name}.{org_name}.{domain}"
                 p_pass = f"{p_name}pw"
-                
-                # chamada da funcaoo bash modular
+                # chamada da funcao bash definida
                 linhas.append(f"registerAndEnrollPeer '{p_name}' '{p_pass}' 'http://localhost:{ca_port}' '{ca_name}' '{p_full}' '{org_base_dir}'")
 
-            # registrar e matricular admin da org
+            # registra e matricula ademir da org
             admin_name = f"{org_name}admin"
             admin_pass = f"{org_name}adminpw"
-            
             linhas.append(f"registerAndEnrollOrgAdmin '{admin_name}' '{admin_pass}' 'http://localhost:{ca_port}' '{ca_name}' '{org_base_dir}' 'Admin@{org_name}.{domain}'")
 
-            # finalizar MSP da org (copiar certs públicos)
+            # finaliz MSP da org, copia certs 
             linhas.append(f"finishOrgMSP '{org_base_dir}' '{org_base_dir}/users/Admin@{org_name}.{domain}/msp'")
 
 
-        # -------------------- Processa Orderers --------------------
+        # -------------------- Processamento dos Orderers --------------------
         # tenta pegar config de CA do orderer, se não existir, define padrões
         ord_ca_conf = orderer_conf.get('ca', {})
         ord_ca_name = ord_ca_conf.get('name', 'ca-orderer')
@@ -106,38 +105,36 @@ command -v fabric-ca-client >/dev/null || {
         linhas.append(f"mkdir -p {ord_ca_client_home}")
         linhas.append(f"export FABRIC_CA_CLIENT_HOME={ord_ca_client_home}")
 
-        # enroll admin da CA do orderer
+        # realiza o enroll do ademir da CA do order
         linhas.append(f"infoln 'Bootstrap Admin CA Orderer...'")
         linhas.append(f"fabric-ca-client enroll -u http://admin:adminpw@localhost:{ord_ca_port} --caname {ord_ca_name}")
 
-        # processar nos orderers
+        # registra e matricula cada no do orderer
         for node in orderer_conf['nodes']:
             o_name = node['name']
             o_pass = f"{o_name}pw"
             o_full = f"{o_name}.{domain}"
-            
             # chamada da funcao bash modular para orderer
             linhas.append(f"registerAndEnrollOrdererNode '{o_name}' '{o_pass}' 'http://localhost:{ord_ca_port}' '{ord_ca_name}' '{o_full}' '{ord_base_dir}'")
 
-        # admin do orderer
+        # registra e matricula o admir do servico de ordenacao
         linhas.append(f"registerAndEnrollOrgAdmin 'ordererAdmin' 'ordererAdminpw' 'http://localhost:{ord_ca_port}' '{ord_ca_name}' '{ord_base_dir}' 'Admin@{domain}'")
 
-        # finalizar MSP da org orderer
+        # finaliza o MSP do orderer
         linhas.append(f"finishOrgMSP '{ord_base_dir}' '{ord_base_dir}/users/Admin@{domain}/msp'")
-
+        
+        # finalizacao e correcao de permissoes no sistema de arquivos 
         linhas.append('\nsuccessln "Todas as identidades foram geradas com sucesso!"')
-
         org_base_dir = f"{self.paths.network_dir}/organizations"
         linhas.append(f"\ninfoln 'Corrigindo permissões da pasta organizations...'")
         linhas.append(f"fix_permissions '{org_base_dir}'")
         
-        # Salva o arquivo e dá permissão de execução
+        # salva o script gerado no disco e define permissoes de execucao
         with open(self.script_saida, 'w') as f:
             f.write("\n".join(linhas))
         
         st = os.stat(self.script_saida)
         os.chmod(self.script_saida, st.st_mode | stat.S_IEXEC)
-        
         co.successln(f"Script gerado: {self.script_saida}")
 
     def _get_bash_functions(self):

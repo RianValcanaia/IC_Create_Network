@@ -6,7 +6,10 @@ de comando (--up, --clean) e chama sequencialmente os validadores
 e geradores de scripts.
 """
 import argparse
+import json
+import sys
 import time
+import socket
 
 from src.path_manager import PathManager
 from src.config_loader import ConfigLoader
@@ -20,26 +23,45 @@ from src.generator.configtx import ConfigTxGenerator
 from src.generator.channel import ChannelScriptGenerator
 from src.generator.deploy import ChaincodeDeployGenerator
 
+def _wait_for_port(host, port, timeout=60):
+    """Aguarda até que uma porta específica esteja aberta"""
+    start_time = time.time()
+    while True:
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                return True
+        except (ConnectionRefusedError, socket.timeout):
+            if time.time() - start_time > timeout:
+                return False
+            time.sleep(2)
+
 def _verifica_prerequisitos(controller):
+    co.infoln("Verificando pré-requisitos do sistema")
+
     try:
         controller.run_script("check_reqs.sh")
     except Exception as e:
         co.errorln(f"\n Erro ao rodar 'check_reqs.sh': {e}")
         return
 
-def _valida_configuracoes(config):    
+def _valida_configuracoes(config): 
+    co.infoln("Validando configurações do arquivo de definição da rede") 
+
     parser = ConfigParser(config)
     parser.valida()
 
     if parser.erros:
         raise RuntimeError("Erros de validação encontrados.")
 
-
 def _cria_compose_ca(config, paths):
+    co.infoln("Gerando arquivos docker-compose para ca")
+
     compose_generator = ComposeGenerator(config, paths)
     compose_generator.generate_ca_compose()
 
 def _start_CA(controller):
+    co.infoln("Iniciando os servidores CA")
+
     try:
         controller.run_script("start_cas.sh")
     except Exception as e:
@@ -47,9 +69,11 @@ def _start_CA(controller):
         return
 
 def _register_enroll(controller, config, paths):
+    co.infoln("Registrando e matriculando identidades")
+
     crypto = CryptoGenerator(config, paths)
 
-    co.infoln("Gerando script de identidades (register_enroll.sh)...")
+    co.actionln("Gerando script de identidades (register_enroll.sh)...")
     crypto.generate()
 
     try:
@@ -61,6 +85,8 @@ def _register_enroll(controller, config, paths):
         return
     
 def _cria_artefatos(controller, config, paths):
+    co.infoln("Gerando artefatos da rede (configtx.yaml, blocos, canais, etc)")
+
     configtx_gen = ConfigTxGenerator(config, paths)
     configtx_gen.generate()
 
@@ -71,6 +97,8 @@ def _cria_artefatos(controller, config, paths):
         return
 
 def _inicializa_nos(controller, config, paths):
+    co.infoln("Gerando arquivos docker-compose para peers e orderers")
+
     compose_generator = ComposeGenerator(config, paths)
     compose_generator.generate_nodes_compose()
 
@@ -81,6 +109,8 @@ def _inicializa_nos(controller, config, paths):
         return
     
 def _configura_canais(controller, config, paths):
+    co.infoln("Configurando canais e fazendo peers entrarem neles")
+
     channel_gen = ChannelScriptGenerator(config, paths)
     channel_gen.generate_channel_script()
 
@@ -91,6 +121,8 @@ def _configura_canais(controller, config, paths):
         return
 
 def _deploy_chaincode(controller, config, paths):
+    co.infoln("Fazendo deploy de chaincodes")
+
     deploy_gen = ChaincodeDeployGenerator(config, paths)
     deploy_gen.generate()
 
@@ -100,37 +132,54 @@ def _deploy_chaincode(controller, config, paths):
         co.errorln(f"\n Erro ao rodar 'deploy_chaincode.sh': {e}")
         return
 
+def _exporta_network_contexto(config, paths):
+    co.infoln("Exportando contexto ativo da rede")
+
+    context = {
+        "domain": config['network_topology']['network']['domain'],
+        "orgs": {}
+    }
+
+    for org in config['network_topology']['organizations']:
+        org_data = {
+            "msp_id": org['msp_id'],
+            "peers": {p['name']: {"port": p['port'], "tls_port": p.get('chaincode_port')} for p in org['peers']}
+        }
+        context["orgs"][org['name']] = org_data
+    
+    # Salva na pasta network para o Shell ler
+    with open(paths.network_dir / "contexto_ativo.json", "w") as f:
+        json.dump(context, f, indent=2)
 
 def _network_up(controller, config, paths):
-    # ------------- Preparando o ambiente --------------
-    co.infoln("Iniciando a rede")
-    co.infoln("Verificando pré-requisitos do sistema")
+    co.headerln("Iniciando a rede")
+
+    paths.ensure_network_dirs()
+
+    # --- Validações iniciais ---
     _verifica_prerequisitos(controller)
-    co.infoln("Validando configurações do arquivo network.yaml")
     _valida_configuracoes(config)
+    _exporta_network_contexto(config, paths)
 
     pkg_id_file = paths.network_dir / "CC_PACKAGE_ID"
     if not pkg_id_file.exists():
         pkg_id_file.touch()
 
-    co.infoln("Gerando arquivos docker-compose para ca")
     _cria_compose_ca(config, paths)
 
-   # ------------- Iniciando a network --------------
-    co.infoln("Iniciando os servidores CA")
+   # --- Inicialização da rede ---
     _start_CA(controller)
-    co.infoln("Registrando e matriculando identidades")
     _register_enroll(controller, config, paths)
-    co.infoln("Gerando artefatos da rede (configtx.yaml, blocos, canais, etc)")
     _cria_artefatos(controller, config, paths)
-    co.infoln("Gerando arquivos docker-compose para peers e orderers")
     _inicializa_nos(controller, config, paths)
-    co.infoln("Aguardando inicialização completa dos containers...")
-    time.sleep(10) 
-    co.infoln("Configurando canais e fazendo peers entrarem neles")
     _configura_canais(controller, config, paths)
-    co.infoln("Fazendo deploy de chaincodes")
     _deploy_chaincode(controller, config, paths)
+    
+    co.infoln("Aguardando estabilização final do Chaincode (Porta 9999)...")
+    if _wait_for_port("localhost", 9999, timeout=120):
+        co.successln("Chaincode está escutando na porta 9999!")
+    else:
+        co.warnln("Timeout: O Chaincode não respondeu na porta 9999 a tempo.")
 
 def _clean_files(controller, op = 1):
     try:
@@ -162,47 +211,39 @@ def main():
         help="Inicia o processo completo de subida da rede (network_up)."
     )
 
+    parser.add_argument(
+        '-n', '--network', 
+        type=str, 
+        required=False, 
+        help="Caminho para o arquivo network.yaml que será utilizado"
+    )
+
     args = parser.parse_args()
 
     try:
-        # configura caminhos
-        paths = PathManager()
+        paths = PathManager(custom_network_yaml=args.network)
+        co.infoln(f"Alvo: {paths.network_yaml.name}")
 
-        # carregar configuracoes
         loader = ConfigLoader(paths.network_yaml, paths.versions_yaml)
-        # inicializa controller da rede
         config = loader.load()
+
         controller = NetworkController(config, paths, log_to_file=args.log)
 
         paths.ensure_network_dirs()
 
-        # executa em modo limpeza
         if args.clean:
             op_code = 1 if args.clean == "all" else 0
-            co.infoln(f"Executando limpeza modo: {args.clean}")
             _clean_files(controller, op=op_code)
 
-        # sobe a rede
         if args.up:
-            # configura caminhos
-            paths = PathManager()
-
-            # carregar configuracoes
-            loader = ConfigLoader(paths.network_yaml, paths.versions_yaml)
-            # inicializa controller da rede
-            config = loader.load()
-            controller = NetworkController(config, paths, log_to_file=args.log)
-
-            paths.ensure_network_dirs()
-
             _network_up(controller, config, paths)
 
         if not args.clean and not args.up:
             parser.print_help()
 
     except Exception as e:
-        co.errorln(f"{e}")
-        exit(1)
+        co.errorln(f"Falha Crítica: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

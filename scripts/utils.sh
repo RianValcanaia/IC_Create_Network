@@ -10,24 +10,24 @@ BLUE="\033[0;34m"
 CYAN="\033[0;36m"
 RESET="\033[0m"
 
-# funcao de info (azul)
+headerln() {
+    echo -e "${BLUE}[INFO] === ${1^^} ===${RESET}"
+}
+
 infoln() {
-    echo -e "${BLUE}[INFO] $1${RESET}"
+    echo -e "${BLUE}[INFO] --- $1 ---${RESET}"
 }
 
-# funcao de sucesso (verde)
 successln() {
-    echo -e "${GREEN}[SUCESSO] $1${RESET}"
+    echo -e "${GREEN}[SUCESSO] [✓] $1${RESET}"
 }
 
-# funcao de aviso (amarelo)
-warnln() {
-    echo -e "${YELLOW}[AVISO] $1${RESET}"
-}
-
-# funcao de erro (vermelho)
 errorln() {
-    echo -e "${RED}[ERRO] $1${RESET}"
+    echo -e "${RED}[ERRO] [X] $1${RESET}"
+}
+
+warnln() {
+    echo -e "${YELLOW}[AVISO] [!] $1${RESET}"
 }
 
 remove_if_exists() {

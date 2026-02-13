@@ -14,14 +14,26 @@ class Colors:
     RED = "\033[31m"
     YELLOW = "\033[33m"
 
+    @staticmethod
+    def headerln(msg: str):
+        print(f"{Colors.BLUE}[INFO] === {msg.upper()} ==={Colors.RESET}")
+
+    @staticmethod
     def infoln(msg: str):
-        print(f"{Colors.BLUE}[INFO] {msg}{Colors.RESET}")
+        print(f"{Colors.BLUE}[INFO] --- {msg} ---{Colors.RESET}")
 
+    @staticmethod
+    def actionln(msg: str):
+        print(f"{Colors.BLUE}[INFO] > {msg}{Colors.RESET}")
+
+    @staticmethod
     def successln(msg: str):
-        print(f"{Colors.GREEN}[SUCESSO] {msg}{Colors.RESET}")
+        print(f"{Colors.GREEN}[SUCESSO] [✓] {msg}{Colors.RESET}")
 
+    @staticmethod
     def errorln(msg: str):
-        print(f"{Colors.RED}[ERRO] {msg}{Colors.RESET}")
+        print(f"{Colors.RED}[ERRO] [X] {msg}{Colors.RESET}")
 
+    @staticmethod
     def warnln(msg: str):
-        print(f"{Colors.YELLOW}[AVISO] {msg}{Colors.RESET}")
+        print(f"{Colors.YELLOW}[AVISO] [!] {msg}{Colors.RESET}")

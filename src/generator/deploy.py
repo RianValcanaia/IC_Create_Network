@@ -45,6 +45,14 @@ class ChaincodeDeployGenerator:
             # caminho absoluto da pasta do chaincode vindo do Python
             abs_cc_path = self.paths.chaincode_dir / cc['name']
             
+            # compilação local do chaincode para Linux AMD64
+            co.infoln(f"Compilando chaincode {cc['name']} localmente para Linux...")
+            compile_cmd = (
+                f"cd {abs_cc_path} && "
+                f"GOOS=linux GOARCH=amd64 go build -o chaincode"
+            )
+            os.system(compile_cmd)
+
             self._create_ccaas_package(cc, package_file)
 
             # --- instalação ---
@@ -66,11 +74,14 @@ class ChaincodeDeployGenerator:
 
             # substituido $(pwd) pelo caminho absoluto injetado pelo Python
             linhas.append(f"docker run -d --name {cc_service} --network {network_name}_net "
+                        f"--dns 8.8.8.8 "
+                        f"-p 9999:9999 "
                         f"-e CHAINCODE_SERVER_ADDRESS=0.0.0.0:9999 "
                         f"-e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID "
                         f"-v {abs_cc_path}:/opt/gopath/src/chaincode "
+                        f"-w /opt/gopath/src/chaincode "  # Define onde o comando será executado
                         f"{img_prefix}/fabric-ccenv:{fabric_version} "
-                        f"sh -c 'cd /opt/gopath/src/chaincode && go mod tidy && go build -o chaincode && ./chaincode'")
+                        f"./chaincode") # O './' indica que é o arquivo na pasta atual
 
             # --- aprovação e Commit ---
             ord_tls_ca = (self.paths.network_dir / "organizations" / "ordererOrganizations" / domain / "orderers" / f"{orderer['name']}.{domain}" / "tls" / "ca.crt").resolve()

@@ -1,53 +1,38 @@
 #!/bin/bash
 # Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
-# Seta variáveis de ambiente passados por linha de comando <NOME_ORG> <NOME_PEER>
+# set_env.sh <ORG> <PEER>
 
-source $(dirname "$0")/utils.sh
-
-if [ -z "$1" ] || [ -z "$2" ]; then
-    echo "Uso: source ./scripts/set_env.sh <NOME_ORG> <NOME_PEER>"
-    return 1
-fi
-
-if [ -n "$ZSH_VERSION" ]; then
-    SCRIPT_PATH="${(%):-%x}"
-else
-    SCRIPT_PATH="${BASH_SOURCE[0]}"
-fi
-
+# 1. Detecta o diretório onde o script está
+if [ -n "$ZSH_VERSION" ]; then SCRIPT_PATH="${(%):-%x}"; else SCRIPT_PATH="${BASH_SOURCE[0]}"; fi
 SCRIPT_DIR=$(cd "$(dirname "$SCRIPT_PATH")" && pwd)
+
+# 2. Define o ROOT do projeto (subindo apenas 1 nível de 'scripts/')
 PROJECT_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
-CONFIG_FILE="$PROJECT_ROOT/project_config/network.yaml"
-NETWORK_DIR="$PROJECT_ROOT/network"
 
-export PATH="$PROJECT_ROOT/bin:$PATH"
+# 3. Define o caminho do arquivo de contexto usando o ROOT absoluto
+CONTEXT_FILE="$PROJECT_ROOT/network/contexto_ativo.json"
 
-if [ ! -f "$CONFIG_FILE" ]; then
-    echo "[ERRO] Não encontrei o arquivo em: $CONFIG_FILE"
-    return 1
+ORG=$1
+PEER=$2
+
+# Validação se o arquivo existe antes de chamar o jq
+if [ ! -f "$CONTEXT_FILE" ]; then
+    echo -e "\033[1;31m[ERRO]\033[0m Arquivo não encontrado: $CONTEXT_FILE"
+    return 1 # Use return pois você está dando 'source'
 fi
 
-ORG_NAME=$1
-PEER_NAME=$2
+# 4. Extração de dados (adicionando aspas nas variáveis do jq para segurança)
+DOMAIN=$(jq -r '.domain' "$CONTEXT_FILE")
+MSP_ID=$(jq -r ".orgs[\"$ORG\"].msp_id" "$CONTEXT_FILE")
+PORT=$(jq -r ".orgs[\"$ORG\"].peers[\"$PEER\"].port" "$CONTEXT_FILE")
 
-DOMAIN=$(yq -r '.network.domain' "$CONFIG_FILE")
-MSP_ID=$(yq -r ".organizations[] | select(.name == \"$ORG_NAME\") | .msp_id" "$CONFIG_FILE")
-PEER_PORT=$(yq -r ".organizations[] | select(.name == \"$ORG_NAME\") | .peers[] | select(.name == \"$PEER_NAME\") | .port" "$CONFIG_FILE")
-
-if [ "$MSP_ID" = "null" ] || [ "$PEER_PORT" = "null" ]; then
-    echo "[ERRO] Org ou Peer não encontrados em $CONFIG_FILE"
-    return 1
-fi
-
-export FABRIC_CFG_PATH="$NETWORK_DIR/compose/peercfg"
+# 5. Export de variáveis do Fabric
+export PATH="$PATH:$PROJECT_ROOT/bin"
+export FABRIC_CFG_PATH="$PROJECT_ROOT/network/compose/peercfg"
 export CORE_PEER_TLS_ENABLED=true
 export CORE_PEER_LOCALMSPID="$MSP_ID"
+export CORE_PEER_ADDRESS="localhost:$PORT"
+export CORE_PEER_TLS_ROOTCERT_FILE="$PROJECT_ROOT/network/organizations/peerOrganizations/${ORG}.${DOMAIN}/peers/${PEER}.${ORG}.${DOMAIN}/tls/ca.crt"
+export CORE_PEER_MSPCONFIGPATH="$PROJECT_ROOT/network/organizations/peerOrganizations/${ORG}.${DOMAIN}/users/Admin@${ORG}.${DOMAIN}/msp"
 
-PEER_FULL_NAME="${PEER_NAME}.${ORG_NAME}.${DOMAIN}"
-ORG_PATH="$NETWORK_DIR/organizations/peerOrganizations/${ORG_NAME}.${DOMAIN}"
-
-export CORE_PEER_TLS_ROOTCERT_FILE="${ORG_PATH}/peers/${PEER_FULL_NAME}/tls/ca.crt"
-export CORE_PEER_MSPCONFIGPATH="${ORG_PATH}/users/Admin@${ORG_NAME}.${DOMAIN}/msp"
-export CORE_PEER_ADDRESS="localhost:${PEER_PORT}"
-
-echo "[SUCESSO] Ambiente configurado para $ORG_NAME ($PEER_NAME)"
+echo -e "\033[1;32m[SUCESSO]\033[0m Ambiente configurado: $ORG ($PEER) -> porta $PORT"

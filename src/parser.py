@@ -12,18 +12,19 @@ import os
 from .utils import Colors as co
 
 class ConfigParser:
-    # o ConfigLoader retorna um dict com 'network_topology' e 'env_versions'
-    # estamos interessados apenas na topologia da rede.
     def __init__(self, config_completa):
+        # inicializa a topologia da rede pegando somente a secao relevante
         self.topologia = config_completa.get('network_topology', {})
         self.erros = []
         self.avisos = []
         
-        # cache para validação semântica (nomes das orgs encontradas)
+        # set para armazenar nomes da organizacoes e validar se os canais as referenciam corretamente
         self.orgs_definidas = set()
 
-    # executa todas as verificações. retorna true se aprovado, false se houver erros.
     def valida(self):
+        """
+        Executa a sequencia completa de testes na configuracao da rede.
+        """
         if not self.topologia:
             self.erros.append("O arquivo network.yaml parece estar vazio ou mal formatado.")
             return self._print_results()
@@ -34,16 +35,17 @@ class ConfigParser:
         self._valida_organizacoes() 
         self._valida_orderer()
         self._valida_canais()       
-        # ainda não implementei o chaincode, futuramente preciso ver isso
         self._valida_chaincodes()   
 
         return self._print_results()
 
-    # exibe os erros e avisos acumulados.
     def _print_results(self):
+        """
+        Exibe o veredito final no terminal
+        """
         if self.avisos:
             for a in self.avisos:
-                co.warnln(f" [Aviso] {a}")
+                co.warnln(f"{a}")
 
         if self.erros:
             for e in self.erros:
@@ -54,8 +56,10 @@ class ConfigParser:
         co.successln("Validação concluída com sucesso. Nenhum erro encontrado.")
         return True
 
-    # verifica se chaves obrigatórias existem em um dicionário, retorna true se todas existem
     def _chaves_obrigatorias(self, dado, chaves_obrigatorias, contexto):
+        """
+        Utilitario para garantir que campos essenciais existam no yaml
+        """
         if not isinstance(dado, dict):
             self.erros.append(f"Em '{contexto}': Esperado um objeto (dict), recebeu {type(dado).__name__}.")
             return False
@@ -67,46 +71,49 @@ class ConfigParser:
         return True
 
     # ---------------------- Validadores Específicos -------------------------
-    # valida se temos network, organizations, orderer na raiz
     def _valida_chaves_raizes(self):
+        """
+        Verifica se o yaml tem as colunas principais: network, organizations e orderer
+        """
         obrigatorios = ['network', 'organizations', 'orderer']
-        # 'channels' e 'chaincodes' são tecnicamente opcionais para subir a infra, mas recomendados
         self._chaves_obrigatorias(self.topologia, obrigatorios, "Raiz do network.yaml")
-
-    # valida a seção network
+        
     def _valida_secao_network(self):
+        """
+        Verifica nome e dominio da rede (nao podem ter espacos)
+        """
         net = self.topologia.get('network', {})
         if self._chaves_obrigatorias(net, ['name', 'domain'], "seção 'network'"):
-            # verifica se o domain não tem espaços, erro comum de digitação
             if ' ' in net['domain']:
                 self.erros.append(f"Network Domain '{net['domain']}' não deve conter espaços.")
 
-    # valida a seção organizations
     def _valida_organizacoes(self):
+        """
+        Valida orgs, CAs e Peers, sao aplicados defaults onde permitido
+        """
         orgs = self.topologia.get('organizations', [])
         if not isinstance(orgs, list) or len(orgs) == 0:
             self.erros.append("A seção 'organizations' deve ser uma lista e conter pelo menos uma organização.")
             return
 
         for i, org in enumerate(orgs):
-            # Tenta pegar o nome para mensagens de erro melhores, ou usa indice
             org_name = org.get('name', f"Org[{i}]")
             contexto_org = f"Organização '{org_name}'"
 
-            # 1. Chaves Básicas da Org
             if not self._chaves_obrigatorias(org, ['name', 'msp_id','ca', 'peers'], contexto_org):
                 continue
             
+            # guardo o nome para validar os canais depois
             self.orgs_definidas.add(org['name'])
 
-            # 2. Validação da CA (Obrigatória)
+            # valida a CA da org
             ca = org.get('ca')
             if not ca:
                 self.erros.append(f"{contexto_org} não possui CA definida (obrigatório).")
             else:
                 self._chaves_obrigatorias(ca, ['name', 'host', 'port'], f"CA de {org_name}")
 
-            # 3. Validação dos Peers
+            # valida os peers
             peers = org.get('peers', [])
             if not isinstance(peers, list) or len(peers) < 1:
                 self.erros.append(f"{contexto_org} deve ter no mínimo 1 Peer definido.")
@@ -116,17 +123,15 @@ class ConfigParser:
                 p_name = p.get('name', 'unnamed')
                 contexto_peer = f"Peer '{p_name}' em {org_name}"
 
-                # Chaves obrigatórias do Peer
                 chaves_obrigatorias_peers = ['name', 'host', 'port', 'chaincode_port']
                 if not self._chaves_obrigatorias(p, chaves_obrigatorias_peers, contexto_peer):
                     continue
 
-                # Validação de Tipos (Portas devem ser inteiros)
+                # garante que portas sao numeros (evita erros de string no docker-compose)
                 if not isinstance(p['port'], int) or not isinstance(p['chaincode_port'], int):
                     self.erros.append(f"{contexto_peer}: Portas devem ser números inteiros.")
 
-                # --- Lógica de Banco de Dados (State DB) ---
-                # Se 'state_db' não foi definido, aplica o DEFAULT
+                # logica de base de dados (state DB), se nao definido o padrao é goLevelDB
                 if 'state_db' not in p:
                     p['state_db'] = 'GoLevelDB' # Injeção de valor padrão
                 
@@ -146,8 +151,10 @@ class ConfigParser:
                 else:
                     self.erros.append(f"{contexto_peer}: state_db inválido ('{dp_tipo}'). Use 'CouchDB' ou 'GoLevelDB'.")
 
-    # valida a seção orderer
     def _valida_orderer(self):
+        """
+        Valida o servico de ordenacao, consenso (Raft/BFT) e tamanho de bloco.
+        """
         ord_secao = self.topologia.get('orderer', {})
         if self._chaves_obrigatorias(ord_secao, ['type', 'nodes', 'batch_timeout', 'batch_size', 'ca'], "seção 'orderer'"):
             

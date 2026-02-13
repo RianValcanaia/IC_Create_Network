@@ -11,8 +11,10 @@ from ..utils import Colors as co
 
 class ConfigTxGenerator:
     def __init__(self, config, paths):
+        # inicializa as configuracoes e caminhos necessarios
         self.config = config
         self.paths = paths
+        # define a saida do script e do configtx.yaml
         self.config_output_path = self.paths.network_dir / "configtx.yaml"
         self.script_saida = self.paths.scripts_dir / "create_artifacts.sh"
 
@@ -44,6 +46,7 @@ class ConfigTxGenerator:
         # gera o script shell
         self._create_shell_script()
 
+    # constroi a secao de organizacoes do configtx.yaml, incluindo a org do orderer e as orgs de peer
     def _build_organizations_section(self):
         domain = self.config['network_topology']['network']['domain']
         orgs_yaml = "Organizations:\n"
@@ -82,6 +85,7 @@ class ConfigTxGenerator:
 
         return orgs_yaml
 
+    # Define politicas padrao para que as aplicacooes rodem do canal
     def _build_capabilities_section(self):
         ord_type = self.config['network_topology']['orderer'].get('type', 'etcdraft').lower()
         return """
@@ -93,6 +97,7 @@ Capabilities:
   Application: &ApplicationCapabilities
     V2_5: true"""
 
+    # 
     def _build_application_section(self):
         return """
 Application: &ApplicationDefaults
@@ -117,6 +122,7 @@ Application: &ApplicationDefaults
     <<: *ApplicationCapabilities
 """
 
+    # controi a configuracao do servico de ordenacao
     def _build_orderer_section(self):
         domain = self.config['network_topology']['network']['domain']
         ord_conf = self.config['network_topology']['orderer']
@@ -144,6 +150,7 @@ Application: &ApplicationDefaults
         yaml_content += f"    AbsoluteMaxBytes: {abs_max_bytes}\n"
         yaml_content += f"    PreferredMaxBytes: {pref_max_bytes}\n"
 
+        # adiciona detalhes do concenso escolhido
         if ord_type == 'etcdraft':
             yaml_content += self._build_raft_consenters(domain)
         else:
@@ -176,12 +183,14 @@ Channel: &ChannelDefaults
     <<: *ChannelCapabilities
 """
 
+    # perfis que unem organizacoes, orderes e canais
     def _build_profiles_section(self):
         orgs = self.config['network_topology']['organizations']
         channels = self.config['network_topology'].get('channels', [])
 
         yaml_content = "Profiles:\n"
 
+        # logica para encontrar o canal de bootstrao, aquele que contém todas as orgs
         bootstrap_channel = None
         bootstrap_profile = None
         for cc in channels:
@@ -206,6 +215,8 @@ Channel: &ChannelDefaults
         yaml_content += "    Application:\n"
         yaml_content += "      <<: *ApplicationDefaults\n"
         yaml_content += "      Organizations:\n"
+
+        # adiciona todas as orgs
         for o in orgs:
             org_name = o['name']
             yaml_content += f"        - *{org_name}\n"
@@ -234,6 +245,8 @@ Channel: &ChannelDefaults
             yaml_content += "      Organizations:\n"
             
             participating = ch.get('participating_orgs', [])
+
+            # adiciona todas as orgs
             for p_org in participating:
                 yaml_content += f"        - *{p_org}\n"
                 
@@ -300,7 +313,7 @@ Channel: &ChannelDefaults
             endpoints.append(f"{node['name']}.{domain}:{node['port']}")
         return endpoints
 
-    # ------------ Cria o script shell (create_artifacts.sh) ------------
+    # cria o script shell (create_artifacts.sh) para gerar os blocos de configuração usando configtxgen
     def _create_shell_script(self):
         channels = self.config['network_topology'].get('channels', [])
         orgs = self.config['network_topology']['organizations']
