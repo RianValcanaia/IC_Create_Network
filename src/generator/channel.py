@@ -43,6 +43,20 @@ class ChannelScriptGenerator:
         linhas.append(f"export ORD_ADMIN_CERT={ord_tls_path}/server.crt")
         linhas.append(f"export ORD_ADMIN_KEY={ord_tls_path}/server.key\n")
 
+        for node in self.config['network_topology']['orderer']['nodes']:
+            node_full = f"{node['name']}.{domain}"
+            node_tls = f"{self.paths.network_dir}/organizations/ordererOrganizations/{domain}/orderers/{node_full}/tls"
+            node_name = node['name']  # ← extrai antes
+            linhas.append(
+                f"until curl -sk "
+                f"--cert {node_tls}/server.crt "
+                f"--key {node_tls}/server.key "
+                f"--cacert {node_tls}/ca.crt "
+                f"https://localhost:{node['admin_port']}/participation/v1/channels "
+                f">/dev/null 2>&1; do "
+                f"echo 'Aguardando {node_name}...'; sleep 2; done"
+            )
+
         # itera sobre os canais definidos na topologia
         for ch in channels:
             ch_name = ch['name']
@@ -52,10 +66,15 @@ class ChannelScriptGenerator:
             
             # 1. faz todos os orderers entrarem no canal usando osnadmin
             for node in self.config['network_topology']['orderer']['nodes']:
+                node_full = f"{node['name']}.{domain}"
+                node_tls_path = f"{self.paths.network_dir}/organizations/ordererOrganizations/{domain}/orderers/{node_full}/tls"
+                
                 cmd_osn = (
                     f"osnadmin channel join --channelID {ch_name} "
                     f"--config-block {block_path} -o localhost:{node['admin_port']} "
-                    f"--ca-file $ORD_CA --client-cert $ORD_ADMIN_CERT --client-key $ORD_ADMIN_KEY"
+                    f"--ca-file {node_tls_path}/ca.crt "
+                    f"--client-cert {node_tls_path}/server.crt "
+                    f"--client-key {node_tls_path}/server.key"
                 )
                 linhas.append(cmd_osn)
 

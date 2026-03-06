@@ -88,7 +88,18 @@ class ConfigTxGenerator:
     # Define politicas padrao para que as aplicacooes rodem do canal
     def _build_capabilities_section(self):
         ord_type = self.config['network_topology']['orderer'].get('type', 'etcdraft').lower()
-        return """
+    
+        if ord_type == 'bft':
+            return """
+Capabilities:
+  Channel: &ChannelCapabilities
+    V3_0: true
+  Orderer: &OrdererCapabilities
+    V2_0: true
+  Application: &ApplicationCapabilities
+    V2_5: true"""
+        else:
+            return """
 Capabilities:
   Channel: &ChannelCapabilities
     V2_0: true

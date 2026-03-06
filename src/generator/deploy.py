@@ -31,6 +31,8 @@ class ChaincodeDeployGenerator:
             "infoln '--- Iniciando Deploy de Chaincode ---'"
         ]
 
+        
+
         for cc in self.config['network_topology']['chaincodes']:
             domain = self.config['network_topology']['network']['domain']
             orderer = self.config['network_topology']['orderer']['nodes'][0]
@@ -148,8 +150,8 @@ class ChaincodeDeployGenerator:
                     "requiredPeerCount": pdc_info['required_peer_count'],
                     "maxPeerCount": pdc_info['max_peer_count'],
                     "blockToLive": pdc_info['block_to_live'],
-                    "memberOnlyRead": True if 'member' in pdc_info['member_only_read'] else False,
-                    "memberOnlyWrite": True if 'member' in pdc_info['member_only_write'] else False
+                    "memberOnlyRead": self._resolve_bool_field(pdc_info.get('member_only_read', False)),
+                    "memberOnlyWrite": self._resolve_bool_field(pdc_info.get('member_only_write', False))
                 })
             # salva um ficheiro por chaincode
             output_path = self.paths.chaincode_dir / f"{cc['name']}_collections.json"
@@ -188,3 +190,10 @@ class ChaincodeDeployGenerator:
             outer_tar.addfile(info_code, io.BytesIO(code_tar_bytes))
         
         co.successln(f"Pacote CCAAS corrigido gerado em: {output_path}")
+
+    def _resolve_bool_field(self, value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return 'member' in value
+        return False
