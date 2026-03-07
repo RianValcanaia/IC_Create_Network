@@ -43,7 +43,6 @@ orderer:
 organizations:
   - name: "Org1"
     msp_id: "Org1MSP"
-    # Obrigatório ter CA (regra de negócio)
     ca:
       name: "ca-org1"
       host: "ca.org1.exemplo.com"
@@ -53,10 +52,6 @@ organizations:
         host: "peer0.org1.exemplo.com"
         port: 7051
         chaincode_port: 7052
-        # se não adiciona state_db, o padrão é GoLevelDB
-        # state_db: "CouchDB" # "CouchDB" ou "GoLevelDB"
-        # couchdb_port: 5984  # Obrigatório se state_db for CouchDB
-        
       - name: "peer1"
         host: "peer1.org1.exemplo.com"
         port: 8051
@@ -110,25 +105,25 @@ organizations:
         port: 14051
         chaincode_port: 14052
 
-# Definições de canais, é necessario ter um canal com todas as orgs para bootstrap inicial, like system-channel
+# Definições de canais
 channels:
   - name: "channel-all"
     participating_orgs: ["Org1", "Org2", "Org3", "Org4"]
-    consenter_policy: "AND('OrdererMSP.member')" # Política de consenso para o canal, quem pode aprovar a criação do canal
+    consenter_policy: "AND('OrdererMSP.member')"
   - name : "channel12"
     participating_orgs: ["Org1", "Org2"]
-    consenter_policy: "AND('OrdererMSP.member')" # Política de consenso para o canal, quem pode aprovar a criação do canal
+    consenter_policy: "AND('OrdererMSP.member')"
 
 # Definição de chaincodes
 chaincodes:
   - name: "basic_asset"
     path: "./chaincode/basic_asset" 
-    channel: "channel-all"   # canal onde o chaincode sera instalado 
+    channel: "channel-all"
     lang: "go"                       
     version: "1.0"
-    sequence: 1         # versão logica do chaincode
-    endorsement_policy: "AND('Org1MSP.member', 'Org2MSP.member', 'Org3MSP.member', 'Org4MSP.member')"   # quem precisa aprovar a instalação do chaincode
-    # definição de colecoes privadas
+    sequence: 1
+    port: 9999                        # porta CCAAS do container
+    endorsement_policy: "AND('Org1MSP.member', 'Org2MSP.member', 'Org3MSP.member', 'Org4MSP.member')"
     pdc: 
       - name: "collectionPrivate"
         policy: "OR('Org1MSP.member')"
@@ -136,6 +131,14 @@ chaincodes:
         max_peer_count: 3
         block_to_live: 1000
         member_only_read: true
-        # não sei ainda se isso precisa estar aqui
         member_only_write: true
-    
+
+  - name: "calc_do"
+    path: "./chaincode/calc_do"
+    channel: "channel-all"
+    lang: "go"
+    version: "1.0"
+    sequence: 1
+    port: 10000                       # porta CCAAS do container — diferente do basic_asset
+    endorsement_policy: "AND('Org1MSP.member', 'Org2MSP.member', 'Org3MSP.member', 'Org4MSP.member')"
+    pdc: []
