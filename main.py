@@ -217,7 +217,7 @@ def main():
     parser.add_argument(
         '-n', '--network', 
         type=str, 
-        required=False, 
+        required=True, 
         help="Caminho para o arquivo network.yaml que será utilizado"
     )
 
@@ -236,6 +236,9 @@ def main():
 
         if args.clean:
             op_code = 1 if args.clean == "all" else 0
+
+            if not args.network:
+                co.warnln("Nenhum arquivo de configuração de rede especificado para limpeza. Usando o padrão 'network.yaml' no diretório do projeto.")
             _clean_files(controller, op=op_code)
 
         if args.up:
