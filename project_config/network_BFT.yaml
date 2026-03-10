@@ -1,0 +1,133 @@
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
+
+network:
+  name: "FabricNetwork"
+  domain: "exemplo.com"  # Dominio base para todos os nos, nos serao nome.exemplo.com
+
+# Configuracao Global do Orderer
+orderer:
+  type: "BFT"            # Tipo de consenso
+  batch_timeout: "2s"    # Tempo maximo para fechar um bloco
+  batch_size:
+    max_message_count: 500      # Maximo de transações por bloco 
+    absolute_max_bytes: "10MB"  # Tamanho maximo absoluto do bloco
+    preferred_max_bytes: "2MB"  # Tamanho maximo preferido do bloco
+  nodes:                 # Definicao dos nos do orderer
+    # quatro nos orderes no minimo para tolerar uma falha bizantina, n = 3f +1
+    - name: "orderer0"   
+      host: "orderer0.exemplo.com" 
+      port: 7060
+      admin_port: 7061
+
+    - name: "orderer1"
+      host: "orderer1.exemplo.com"
+      port: 7062
+      admin_port: 7063
+
+    - name: "orderer2"
+      host: "orderer2.exemplo.com"
+      port: 7064
+      admin_port: 7065
+       
+    - name: "orderer3"
+      host: "orderer3.exemplo.com"
+      port: 7066
+      admin_port: 7067
+  ca:
+    name: "ca-orderer"
+    host: "ca.orderer.exemplo.com" # Host virtual para o docker
+    port: 7054
+
+# Cada organizacao participante na rede possui: um CA, um ou mais peers, um MSP
+organizations:
+  - name: "Org1"
+    msp_id: "Org1MSP"
+    ca:
+      name: "ca-org1"
+      host: "ca.org1.exemplo.com"
+      port: 8054
+    peers:
+      - name: "peer0"
+        host: "peer0.org1.exemplo.com"
+        port: 7051
+        chaincode_port: 7052
+      - name: "peer1"
+        host: "peer1.org1.exemplo.com"
+        port: 8051
+        chaincode_port: 8052
+
+  - name: "Org2"
+    msp_id: "Org2MSP"
+    ca:
+      name: "ca-org2"
+      host: "ca.org2.exemplo.com"
+      port: 9054
+    peers:
+      - name: "peer0"
+        host: "peer0.org2.exemplo.com"
+        port: 9051
+        chaincode_port: 9052
+      - name: "peer1"
+        host: "peer1.org2.exemplo.com"
+        port: 10051
+        chaincode_port: 10052
+
+  - name: "Org3"
+    msp_id: "Org3MSP"
+    ca:
+      name: "ca-org3"
+      host: "ca.org3.exemplo.com"
+      port: 10054
+    peers:
+      - name: "peer0"
+        host: "peer0.org3.exemplo.com"
+        port: 11051
+        chaincode_port: 11052
+      - name: "peer1"
+        host: "peer1.org3.exemplo.com"
+        port: 12051
+        chaincode_port: 12052
+
+  - name: "Org4"
+    msp_id: "Org4MSP"
+    ca:
+      name: "ca-org4"
+      host: "ca.org4.exemplo.com"
+      port: 11054
+    peers:
+      - name: "peer0"
+        host: "peer0.org4.exemplo.com"
+        port: 13051
+        chaincode_port: 13052
+      - name: "peer1"
+        host: "peer1.org4.exemplo.com"
+        port: 14051
+        chaincode_port: 14052
+
+# Definicoes de canais
+channels:
+  - name: "channel-all"
+    participating_orgs: ["Org1", "Org2", "Org3", "Org4"]
+    consenter_policy: "AND('OrdererMSP.member')"
+  - name : "channel12"
+    participating_orgs: ["Org1", "Org2"]
+    consenter_policy: "AND('OrdererMSP.member')"
+
+# Definicao de chaincodes
+chaincodes:
+  - name: "basic_asset"
+    path: "./chaincode/basic_asset" 
+    channel: "channel-all"
+    lang: "go"                       
+    version: "1.0"
+    sequence: 1
+    port: 9999                        # porta CCAAS do container
+    endorsement_policy: "AND('Org1MSP.member', 'Org2MSP.member', 'Org3MSP.member', 'Org4MSP.member')"
+    pdc: 
+      - name: "collectionPrivate"
+        policy: "OR('Org1MSP.member')"
+        required_peer_count: 1
+        max_peer_count: 3
+        block_to_live: 1000
+        member_only_read: true
+        member_only_write: true
