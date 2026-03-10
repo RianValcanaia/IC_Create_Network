@@ -50,6 +50,7 @@ class NetworkController:
             "GO_VERSION": versions['go'],
             "DOCKER_IMAGE_PREFIX": images['org_hyperledger'],
             "NETWORK_NAME": network_name,
+            "NETWORK_CONFIG": str(self.paths.network_yaml),
             "PATH": f"{project_bin_path}:{system_path}"
         }
 
