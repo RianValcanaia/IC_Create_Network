@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 
 class PathManager:
-    def __init__(self, custom_network_yaml=None):
+    def __init__(self, custom_network_yaml):
         # base do projeto (assumindo que este arquivo está em src/)
         self.base_dir = Path(__file__).parent.parent.resolve()
         
@@ -23,10 +23,7 @@ class PathManager:
         self.versions_yaml = self.config_dir / "versions.yaml"
         self.chaincode_dir = self.base_dir / "chaincode"
         
-        if custom_network_yaml:
-            self.network_yaml = Path(custom_network_yaml).resolve()
-        else:
-            self.network_yaml = self.config_dir / "network.yaml"
+        self.network_yaml = Path(custom_network_yaml).resolve()
 
         self.core_yaml_template = self.config_dir / "core.yaml"
         self.peer_cfg_dir = self.network_dir / "compose" / "peercfg"
