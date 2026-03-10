@@ -5,7 +5,7 @@
 source $(dirname "$0")/utils.sh
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-NETWORK_BASE=${NETWORK_NAME:-$(yq -r '.network.name' "$PROJECT_ROOT/project_config/network.yaml")}
+NETWORK_BASE=${NETWORK_NAME:-$(yq -r '.network.name' "${NETWORK_CONFIG:-$PROJECT_ROOT/project_config/network.yaml}")}
 PROJECT_CA="${NETWORK_BASE}_ca"
 PROJECT_NET="${NETWORK_BASE}_net"
 
