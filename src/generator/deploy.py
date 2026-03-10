@@ -45,6 +45,9 @@ class ChaincodeDeployGenerator:
             # caminho absoluto da pasta do chaincode vindo do Python
             abs_cc_path = self.paths.chaincode_dir / cc['name']
             
+            # porta do chaincode (cada cc tem a sua própria)
+            cc_port = cc['port']
+
             # compilação local do chaincode para Linux AMD64
             co.infoln(f"Compilando chaincode {cc['name']} localmente para Linux...")
             compile_cmd = (
@@ -72,16 +75,16 @@ class ChaincodeDeployGenerator:
             # usando caminho absoluto direto do PathManager
             linhas.append(f"fix_permissions '{abs_cc_path}'")
 
-            # substituido $(pwd) pelo caminho absoluto injetado pelo Python
+            # cada chaincode expõe sua própria porta (cc_port)
             linhas.append(f"docker run -d --name {cc_service} --network {network_name}_net "
                         f"--dns 8.8.8.8 "
-                        f"-p 9999:9999 "
-                        f"-e CHAINCODE_SERVER_ADDRESS=0.0.0.0:9999 "
+                        f"-p {cc_port}:{cc_port} "
+                        f"-e CHAINCODE_SERVER_ADDRESS=0.0.0.0:{cc_port} "
                         f"-e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID "
                         f"-v {abs_cc_path}:/opt/gopath/src/chaincode "
-                        f"-w /opt/gopath/src/chaincode "  # Define onde o comando será executado
+                        f"-w /opt/gopath/src/chaincode "
                         f"{img_prefix}/fabric-ccenv:{fabric_version} "
-                        f"./chaincode") # O './' indica que é o arquivo na pasta atual
+                        f"./chaincode")
 
             # --- aprovação e Commit ---
             ord_tls_ca = (self.paths.network_dir / "organizations" / "ordererOrganizations" / domain / "orderers" / f"{orderer['name']}.{domain}" / "tls" / "ca.crt").resolve()
@@ -148,8 +151,8 @@ class ChaincodeDeployGenerator:
                     "requiredPeerCount": pdc_info['required_peer_count'],
                     "maxPeerCount": pdc_info['max_peer_count'],
                     "blockToLive": pdc_info['block_to_live'],
-                    "memberOnlyRead": True if 'member' in pdc_info['member_only_read'] else False,
-                    "memberOnlyWrite": True if 'member' in pdc_info['member_only_write'] else False
+                    "memberOnlyRead": self._resolve_bool_field(pdc_info.get('member_only_read', False)),
+                    "memberOnlyWrite": self._resolve_bool_field(pdc_info.get('member_only_write', False))
                 })
             # salva um ficheiro por chaincode
             output_path = self.paths.chaincode_dir / f"{cc['name']}_collections.json"
@@ -158,7 +161,7 @@ class ChaincodeDeployGenerator:
 
     def _create_ccaas_package(self, cc, output_path):
         connection = {
-            "address": f"{cc['name']}.{cc['channel']}:9999",
+            "address": f"{cc['name']}.{cc['channel']}:{cc['port']}",  # porta dinâmica por chaincode
             "dial_timeout": "10s",
             "tls_required": False
         }
@@ -188,3 +191,10 @@ class ChaincodeDeployGenerator:
             outer_tar.addfile(info_code, io.BytesIO(code_tar_bytes))
         
         co.successln(f"Pacote CCAAS corrigido gerado em: {output_path}")
+
+    def _resolve_bool_field(self, value):
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return 'member' in value
+        return False

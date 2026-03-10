@@ -137,6 +137,10 @@ def _exporta_network_contexto(config, paths):
 
     context = {
         "domain": config['network_topology']['network']['domain'],
+        "orderers": [
+            {"name": node['name'], "port": node['port']}
+            for node in config['network_topology']['orderer']['nodes']
+        ],
         "orgs": {}
     }
 
@@ -146,8 +150,7 @@ def _exporta_network_contexto(config, paths):
             "peers": {p['name']: {"port": p['port'], "tls_port": p.get('chaincode_port')} for p in org['peers']}
         }
         context["orgs"][org['name']] = org_data
-    
-    # Salva na pasta network para o Shell ler
+
     with open(paths.network_dir / "contexto_ativo.json", "w") as f:
         json.dump(context, f, indent=2)
 
