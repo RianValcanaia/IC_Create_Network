@@ -317,13 +317,13 @@ def _setup_phase(controller, config, paths, phase):
         )
 
 
-def _slurm_deploy(config, paths):
+def _slurm_deploy(config, paths, time):
     """
-    Submete todos os jobs SLURM para o deploy distribuído completo.
-    Deve ser executado apenas da máquina de gerenciamento.
-    Retorna logo após a submissão — os jobs correm de forma assíncrona.
+    Gera um único script bash com todas as fases do deploy e o submete como
+    um único job SLURM. Deve ser executado do nó de login (externo aos nós
+    de compute). Retorna logo após a submissão.
     """
-    SlurmDeployGenerator(config, paths).deploy()
+    SlurmDeployGenerator(config, paths).deploy(time=time)
 
 
 def _clean_files(controller, op=1):
@@ -395,8 +395,8 @@ def main():
         action="store_true",
         dest="slurm_deploy",
         help=(
-            "Submete todos os jobs SLURM para o deploy distribuído completo. "
-            "Execute apenas da máquina de gerenciamento. "
+            "Gera um script bash com todas as fases do deploy e o submete como "
+            "um único job SLURM a partir do nó de login. Requer --time. "
             "Requer 'slurm_node' e 'coordinator' em network.yaml > machines."
         )
     )
@@ -419,6 +419,13 @@ def main():
             "Para --start: cas | nodes | ccaas. "
             "Para --setup: enroll | artifacts | channels | chaincode."
         )
+    )
+    parser.add_argument(
+        '--time',
+        type=str,
+        required=False,
+        metavar='HH:MM:SS',
+        help="Duração máxima do job SLURM (ex: 03:00:00). Obrigatório com --slurm-deploy."
     )
 
     args = parser.parse_args()
@@ -454,7 +461,9 @@ def main():
             _setup_phase(controller, config, paths, args.phase)
 
         elif args.slurm_deploy:
-            _slurm_deploy(config, paths)
+            if not args.time:
+                parser.error("--slurm-deploy requer --time HH:MM:SS")
+            _slurm_deploy(config, paths, args.time)
 
         else:
             parser.print_help()
