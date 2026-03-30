@@ -1,43 +1,73 @@
 # Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
-# Rever: member_only_write 
+# Rever: member_only_write
 
 network:
   name: "FabricNetwork"
   domain: "exemplo.com"  # Domínio base para todos os nós, nos serão nome.exemplo.com
+
+# Mapeamento de máquinas para deploy distribuído.
+# Cada componente pode receber o campo `machine` com o nome de uma máquina aqui definida.
+# Ao rodar `--up --machine <nome>`, apenas os componentes dessa máquina sobem.
+# Se nenhuma máquina for definida ou o campo `machine` estiver ausente nos componentes,
+# o comportamento é o mesmo de `--up` sem `--machine` (tudo local).
+machines:
+  maquina_1:
+    ip: "192.168.1.10"   # IP real da máquina na LAN — ajuste conforme seu cluster
+    slurm_node: "node01" # nome do nó no SLURM (sbatch --nodelist)
+    coordinator: true    # este nó executa enrollment, canais e lifecycle do chaincode
+  maquina_2:
+    ip: "192.168.1.11"
+    slurm_node: "node02"
+  maquina_3:
+    ip: "192.168.1.12"
+    slurm_node: "node03"
+  maquina_4:
+    ip: "192.168.1.13"
+    slurm_node: "node04"
+# Distribuição: 1 orderer + 1 org (CA + 2 peers) por máquina
+# maquina_1 → orderer0 + ca-orderer + Org1  (coordinator)
+# maquina_2 → orderer1 + Org2
+# maquina_3 → orderer2 + Org3
+# maquina_4 → orderer3 + Org4
 
 # Configuração Global do Orderer
 orderer:
   type: "BFT"       # Opções: "etcdraft" ou "BFT"
   batch_timeout: "2s"    # Tempo máximo para fechar um bloco
   batch_size:
-    max_message_count: 500      # Máximo de transações por bloco 
+    max_message_count: 500      # Máximo de transações por bloco
     absolute_max_bytes: "10MB"  # Tamanho máximo absoluto do bloco
     preferred_max_bytes: "2MB"  # Tamanho máximo preferido do bloco
   nodes:                 # Definição do nó do orderer
     # quatro nos orderes no minimo para tolerar uma falha bizantina, n = 3f +1
-    - name: "orderer0"   
-      host: "orderer0.exemplo.com" 
+    - name: "orderer0"
+      host: "orderer0.exemplo.com"
       port: 7060
       admin_port: 7061
+      machine: "maquina_1"
 
     - name: "orderer1"
       host: "orderer1.exemplo.com"
       port: 7062
       admin_port: 7063
+      machine: "maquina_2"
 
     - name: "orderer2"
       host: "orderer2.exemplo.com"
       port: 7064
       admin_port: 7065
-       
+      machine: "maquina_3"
+
     - name: "orderer3"
       host: "orderer3.exemplo.com"
       port: 7066
       admin_port: 7067
+      machine: "maquina_4"
   ca:
     name: "ca-orderer"
     host: "ca.orderer.exemplo.com" # Host virtual para o docker
     port: 7054
+    machine: "maquina_1"
 
 # Cada organização participante na rede possui: um CA, um ou mais peers, um MSP
 organizations:
@@ -47,15 +77,18 @@ organizations:
       name: "ca-org1"
       host: "ca.org1.exemplo.com"
       port: 8054
+      machine: "maquina_1"
     peers:
       - name: "peer0"
         host: "peer0.org1.exemplo.com"
         port: 7051
         chaincode_port: 7052
+        machine: "maquina_1"
       - name: "peer1"
         host: "peer1.org1.exemplo.com"
         port: 8051
         chaincode_port: 8052
+        machine: "maquina_1"
 
   - name: "Org2"
     msp_id: "Org2MSP"
@@ -63,15 +96,18 @@ organizations:
       name: "ca-org2"
       host: "ca.org2.exemplo.com"
       port: 9054
+      machine: "maquina_2"
     peers:
       - name: "peer0"
         host: "peer0.org2.exemplo.com"
         port: 9051
         chaincode_port: 9052
+        machine: "maquina_2"
       - name: "peer1"
         host: "peer1.org2.exemplo.com"
         port: 10051
         chaincode_port: 10052
+        machine: "maquina_2"
 
   - name: "Org3"
     msp_id: "Org3MSP"
@@ -79,15 +115,18 @@ organizations:
       name: "ca-org3"
       host: "ca.org3.exemplo.com"
       port: 10054
+      machine: "maquina_3"
     peers:
       - name: "peer0"
         host: "peer0.org3.exemplo.com"
         port: 11051
         chaincode_port: 11052
+        machine: "maquina_3"
       - name: "peer1"
         host: "peer1.org3.exemplo.com"
         port: 12051
         chaincode_port: 12052
+        machine: "maquina_3"
 
   - name: "Org4"
     msp_id: "Org4MSP"
@@ -95,15 +134,18 @@ organizations:
       name: "ca-org4"
       host: "ca.org4.exemplo.com"
       port: 11054
+      machine: "maquina_4"
     peers:
       - name: "peer0"
         host: "peer0.org4.exemplo.com"
         port: 13051
         chaincode_port: 13052
+        machine: "maquina_4"
       - name: "peer1"
         host: "peer1.org4.exemplo.com"
         port: 14051
         chaincode_port: 14052
+        machine: "maquina_4"
 
 # Definições de canais
 channels:
@@ -117,12 +159,13 @@ channels:
 # Definição de chaincodes
 chaincodes:
   - name: "basic_asset"
-    path: "./chaincode/basic_asset" 
+    path: "./chaincode/basic_asset"
     channel: "channel-all"
-    lang: "go"                       
+    lang: "go"
     version: "1.0"
     sequence: 1
     port: 9999                        # porta CCAAS do container
+    machine: "maquina_1"              # máquina onde o container CCAAS vai rodar
     endorsement_policy: "AND('Org1MSP.member', 'Org2MSP.member', 'Org3MSP.member', 'Org4MSP.member')"
     pdc: 
       - name: "collectionPrivate"
@@ -140,5 +183,6 @@ chaincodes:
     version: "1.0"
     sequence: 1
     port: 10000                       # porta CCAAS do container — diferente do basic_asset
+    machine: "maquina_1"              # máquina onde o container CCAAS vai rodar
     endorsement_policy: "AND('Org1MSP.member', 'Org2MSP.member', 'Org3MSP.member', 'Org4MSP.member')"
     pdc: []

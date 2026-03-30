@@ -1,0 +1,147 @@
+{
+    "exportador": "Indústria de Componentes Eletrônicos do Sul Ltda.",
+    "cabecalho_declaracao_origem": {
+        "NCM": "8471.30.19",
+        "NALADI": "84713019"
+    },
+    "dados_produto": {
+        "denominacao": "Computador Portátil Industrial",
+        "descricao": "Notebook industrial com processador quad-core e certificação IP54",
+        "definicao": "UN",
+        "numeroPeca": "NB-IND-2026-BR",
+        "exFabrica": 4200,
+        "FOB": {
+            "minimo": 4000,
+            "maximo": 4800
+        }
+    },
+    "materiais": {
+        "materiais_componentes_estado_parte_produtor": [
+            {
+                "codigo": "BR-PCB-001",
+                "NCM": "8534.00.00",
+                "componentes": "Placa de circuito impresso principal",
+                "razao_social": "Eletrônica Sul Componentes S.A.",
+                "sigla_pais": "BR",
+                "pais": "Brasil",
+                "valor_CIF": 620,
+                "%_participacao": 14.5
+            },
+            {
+                "codigo": "BR-CAB-002",
+                "NCM": "8544.42.00",
+                "componentes": "Conjunto de cabos e conectores internos",
+                "razao_social": "Cabos Técnicos do Brasil Ltda.",
+                "sigla_pais": "BR",
+                "pais": "Brasil",
+                "valor_CIF": 210,
+                "%_participacao": 5.0
+            },
+            {
+                "codigo": "BR-BAT-003",
+                "NCM": "8507.60.00",
+                "componentes": "Bateria de íon-lítio 56Wh",
+                "razao_social": "Baterias Nacionais Industriais S.A.",
+                "sigla_pais": "BR",
+                "pais": "Brasil",
+                "valor_CIF": 310,
+                "%_participacao": 7.3
+            },
+            {
+                "codigo": "BR-TEC-004",
+                "NCM": "8473.30.49",
+                "componentes": "Teclado com layout ABNT2 retroiluminado",
+                "razao_social": "Periféricos do Sul Indústria Ltda.",
+                "sigla_pais": "BR",
+                "pais": "Brasil",
+                "valor_CIF": 180,
+                "%_participacao": 4.2
+            }
+        ],
+        "materiais_componentes_outros_estados_parte": [
+            {
+                "codigo": "AR-ALU-010",
+                "NCM": "7606.12.90",
+                "componentes": "Chassi em liga de alumínio aeroespacial",
+                "razao_social": "Metalúrgica Patagonia S.R.L.",
+                "sigla_pais": "AR",
+                "pais": "Argentina",
+                "valor_CIF": 480,
+                "%_participacao": 11.2
+            },
+            {
+                "codigo": "AR-CON-011",
+                "NCM": "8536.90.90",
+                "componentes": "Conectores industriais certificados IP67",
+                "razao_social": "Conectores del Sur S.A.",
+                "sigla_pais": "AR",
+                "pais": "Argentina",
+                "valor_CIF": 145,
+                "%_participacao": 3.4
+            },
+            {
+                "codigo": "CL-TLS-020",
+                "NCM": "8531.20.00",
+                "componentes": "Display LCD 15.6 polegadas IPS",
+                "razao_social": "Displays Andinos Ltda.",
+                "sigla_pais": "CL",
+                "pais": "Chile",
+                "valor_CIF": 520,
+                "%_participacao": 12.2
+            },
+            {
+                "codigo": "UY-FAN-030",
+                "NCM": "8414.59.90",
+                "componentes": "Sistema de resfriamento por ventoinha dupla",
+                "razao_social": "ThermoTech Uruguay S.A.",
+                "sigla_pais": "UY",
+                "pais": "Uruguai",
+                "valor_CIF": 95,
+                "%_participacao": 2.2
+            }
+        ],
+        "materiais_componentes_terceiros_paises": [
+            {
+                "codigo": "TW-CPU-040",
+                "NCM": "8542.31.90",
+                "componentes": "Processador quad-core 2.4GHz",
+                "razao_social": "Taiwan Semiconductor Devices Corp.",
+                "sigla_pais": "TW",
+                "pais": "Taiwan",
+                "valor_CIF": 680,
+                "%_participacao": 15.9
+            },
+            {
+                "codigo": "KR-RAM-041",
+                "NCM": "8542.32.90",
+                "componentes": "Memória RAM DDR5 16GB",
+                "razao_social": "Korea Memory Systems Co. Ltd.",
+                "sigla_pais": "KR",
+                "pais": "Coreia do Sul",
+                "valor_CIF": 290,
+                "%_participacao": 6.8
+            },
+            {
+                "codigo": "CN-SSD-042",
+                "NCM": "8471.70.21",
+                "componentes": "Armazenamento SSD NVMe 512GB",
+                "razao_social": "Shenzhen Storage Solutions Co.",
+                "sigla_pais": "CN",
+                "pais": "China",
+                "valor_CIF": 195,
+                "%_participacao": 4.6
+            },
+            {
+                "codigo": "JP-CAP-043",
+                "NCM": "8532.22.00",
+                "componentes": "Capacitores eletrolíticos de alta temperatura",
+                "razao_social": "Nippon Electronic Components Ltd.",
+                "sigla_pais": "JP",
+                "pais": "Japão",
+                "valor_CIF": 58,
+                "%_participacao": 1.4
+            }
+        ]
+    },
+    "descricao_processo": "Montagem, integração e testes funcionais realizados em território nacional conforme especificações técnicas industriais IPC-A-610"
+}

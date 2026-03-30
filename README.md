@@ -21,8 +21,13 @@
 
 - [📌 Objetivos](#-objetivos)
 - [📥 Entradas do sistema](#-entradas-do-sistema)
+- [🧱 Arquitetura de geradores](#-arquitetura-de-geradores)
 - [🧰 Funcionalidades Atuais](#-funcionalidades-atuais)
 - [📂 Como executar](#-como-executar)
+  - [Modo local (desenvolvimento)](#modo-local-desenvolvimento)
+  - [Modo distribuído manual](#modo-distribuído-manual)
+  - [Modo distribuído via SLURM](#modo-distribuído-via-slurm)
+- [⚙️ Referência de comandos](#️-referência-de-comandos)
 - [📄 Código-fonte](#-código-fonte)
 
 ## 📌 Objetivos
@@ -48,10 +53,13 @@ O projeto utiliza uma abordagem modular de geradores para construir a rede:
 
 | Gerador | Função |
 | :--- | :--- |
-| `ComposeGenerator` | Cria os arquivos YAML para subir os serviços de CA das organizações e do orderer. |
-| `CryptoGenerator` | Gera scripts Bash que utilizam o `fabric-ca-client` para criar toda a árvore de certificados MSP e TLS |
+| `ComposeGenerator` | Cria os arquivos YAML para subir os serviços de CA, peers e orderers. Em modo distribuído injeta `extra_hosts` com os IPs reais dos nós remotos. |
+| `CryptoGenerator` | Gera `register_enroll.sh` usando o `fabric-ca-client`. Em modo distribuído usa os IPs reais de cada CA. |
 | `ConfigTxGenerator` | Traduz a topologia para o `configtx.yaml` e gera os perfis de canal (Raft ou BFT). |
-| `Parser` | Valida se a configuração é semanticamente correta (ex: portas únicas, domínios válidos)
+| `ChannelScriptGenerator` | Gera `create_channel.sh` para join de orderers (`osnadmin`) e peers. Em modo distribuído usa IPs reais. |
+| `ChaincodeDeployGenerator` | Gera `deploy_chaincode.sh` (lifecycle completo) e `start_chaincodes.sh` (containers CCAAS). |
+| `SlurmDeployGenerator` | Orquestra o deploy distribuído submetendo jobs SLURM encadeados por dependência. |
+| `ConfigParser` | Valida se a configuração é semanticamente correta (ex: portas únicas, domínios válidos). |
 
 [⬆ Voltar ao topo](#topo)
 
@@ -65,14 +73,148 @@ O projeto utiliza uma abordagem modular de geradores para construir a rede:
 
 ## 📂 Como executar
 
-### 1. Preparar Ambiente
-Certifique-se de ter o Docker instalado. O script interno verificará e baixará os binários do Fabric se necessário. Defina a network fabric que deseja criar em `config/network.yaml`.
+### Pré-requisitos
 
-### 2. Rodar o Automatizador
+- Python 3.10+
+- Docker e Docker Compose (nos nós de compute)
+- Go 1.22+ (para compilação local dos chaincodes)
+- `fabric-ca-client`, `peer`, `osnadmin`, `configtxgen` no `$PATH` (baixados automaticamente na primeira execução)
+- Para deploy distribuído via SLURM: acesso de usuário ao `sbatch` no cluster e filesystem compartilhado entre todos os nós
+
+---
+
+### Modo local (desenvolvimento)
+
+Sobe toda a rede em uma única máquina. Ideal para testes e desenvolvimento.
+
+**1. Defina a topologia em `project_config/network.yaml`.**
+
+**2. Suba a rede:**
 ```bash
-python3 main.py
+python3 main.py --up
 ```
-Isso irá criar a network apresentando logs a cada passo da criação. Por enquanto não há uma opção para limpar a network, caso queira limpar tudo basta rodar o script em `scripts/clean_all.yaml` ou se quiser limpar somente os artefatos da network utilize `scripts/clean_network.yaml`
+
+O comando executa automaticamente: verificação de pré-requisitos → geração de certificados → artefatos de canal → peers e orderers → canais → chaincode lifecycle → containers CCAAS.
+
+**3. Limpar a rede:**
+```bash
+python3 main.py --clean net   # derruba containers e remove artefatos gerados
+python3 main.py --clean all   # idem + remove binários do Fabric
+```
+
+---
+
+### Modo distribuído manual
+
+Útil quando você quer controlar manualmente quais containers sobem em cada máquina. Requer que o setup (enrollment, artefatos, canais, chaincode lifecycle) já tenha sido executado a partir de uma máquina com acesso a todas as CAs.
+
+**1. Configure `machines` no `network.yaml`**, atribuindo cada componente a uma máquina:
+
+```yaml
+machines:
+  maquina_1:
+    ip: "192.168.1.10"
+    coordinator: true
+  maquina_2:
+    ip: "192.168.1.11"
+
+organizations:
+  - name: "Org1"
+    ca:
+      machine: "maquina_1"
+    peers:
+      - name: "peer0"
+        machine: "maquina_1"
+```
+
+**2. Execute o setup completo uma vez** (de qualquer máquina com acesso à LAN):
+```bash
+python3 main.py --up   # sem --machine: roda enrollment, canais e chaincode completo
+```
+
+**3. Em cada máquina, suba apenas seus containers:**
+```bash
+# Na maquina_1:
+python3 main.py --up --machine maquina_1
+
+# Na maquina_2:
+python3 main.py --up --machine maquina_2
+```
+
+Os `docker-compose` gerados incluem `extra_hosts` apontando os hostnames remotos para os IPs reais do cluster, garantindo conectividade entre containers em máquinas diferentes.
+
+---
+
+### Modo distribuído via SLURM
+
+Automatiza o deploy em múltiplas máquinas usando o job scheduler SLURM. A máquina de gerenciamento apenas submete os jobs e sai — todo o processamento real corre nos nós de compute.
+
+**1. Configure `network.yaml`** com os campos `slurm_node` e `coordinator`:
+
+```yaml
+machines:
+  maquina_1:
+    ip: "192.168.1.10"
+    slurm_node: "node01"   # nome do nó no SLURM (sbatch --nodelist)
+    coordinator: true       # exatamente um coordenador por cluster
+  maquina_2:
+    ip: "192.168.1.11"
+    slurm_node: "node02"
+  maquina_3:
+    ip: "192.168.1.12"
+    slurm_node: "node03"
+```
+
+**2. Da máquina de gerenciamento, submeta todos os jobs:**
+```bash
+python3 main.py --slurm-deploy
+```
+
+O comando submete ~11 jobs encadeados por dependência (`--dependency=afterok`) cobrindo 7 fases:
+
+| Fase | Jobs | Executa em |
+|:---:|:---|:---|
+| 1 | CAs | Todos os nós (paralelo) |
+| 2 | Enrollment | Coordenador |
+| 3 | Artefatos de canal | Coordenador |
+| 4 | Peers e orderers | Todos os nós (paralelo) |
+| 5 | Configuração de canais | Coordenador |
+| 6 | Chaincode lifecycle | Coordenador |
+| 7 | Containers CCAAS | Nós com chaincode atribuído |
+
+**3. Acompanhe o progresso:**
+```bash
+squeue -u $USER
+tail -f network/logs/slurm-*.log
+```
+
+> **Requisito:** todos os nós devem acessar o mesmo diretório do projeto via filesystem compartilhado (NFS, Lustre, etc.). Os certificados e artefatos gerados ficam em `network/` e são lidos por todos os jobs sem necessidade de cópia manual.
+
+---
+
+[⬆ Voltar ao topo](#topo)
+
+## ⚙️ Referência de comandos
+
+```
+python3 main.py [COMANDO] [OPÇÕES]
+
+Comandos principais (mutuamente exclusivos):
+  --up                    Sobe a rede completa localmente.
+                          Com --machine: sobe apenas os containers daquela máquina.
+  --start                 Inicia uma fase de containers (usado pelos jobs SLURM).
+                          Requer: --machine <nome> --phase [cas|nodes|ccaas]
+  --setup                 Executa uma fase de setup no coordenador (usado pelos jobs SLURM).
+                          Requer: --phase [enroll|artifacts|channels|chaincode]
+  --slurm-deploy          Submete todos os jobs SLURM para o deploy distribuído completo.
+
+Opções auxiliares:
+  --machine <nome>        Máquina definida em network.yaml > machines.
+  --phase <fase>          Fase a executar (ver --start e --setup acima).
+  --clean [all|net]       Limpa a infraestrutura.
+  --log                   Salva saída dos scripts em network/logs/.
+  -n, --network <path>    Caminho alternativo para o network.yaml.
+```
 
 [⬆ Voltar ao topo](#topo)
 

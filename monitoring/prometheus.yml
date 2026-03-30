@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+scrape_configs:
+- job_name: fabric-peers
+  static_configs:
+  - targets:
+    - peer0.Org1.exemplo.com:9201
+    - peer1.Org1.exemplo.com:9202
+    - peer0.Org2.exemplo.com:9203
+    - peer1.Org2.exemplo.com:9204
+    - peer0.Org3.exemplo.com:9205
+    - peer1.Org3.exemplo.com:9206
+    - peer0.Org4.exemplo.com:9207
+    - peer1.Org4.exemplo.com:9208
+    labels:
+      network: FabricNetwork
+      role: peer
+- job_name: fabric-orderers
+  static_configs:
+  - targets:
+    - orderer0.exemplo.com:9211
+    - orderer1.exemplo.com:9212
+    - orderer2.exemplo.com:9213
+    - orderer3.exemplo.com:9214
+    labels:
+      network: FabricNetwork
+      role: orderer
