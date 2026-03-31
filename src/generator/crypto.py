@@ -122,7 +122,9 @@ command -v fabric-ca-client >/dev/null || {
                 p_name = peer['name']
                 p_full = f"{p_name}.{org_name}.{domain}"
                 p_pass = f"{p_name}pw"
-                linhas.append(f"registerAndEnrollPeer '{p_name}' '{p_pass}' '{ca_url}' '{ca_name}' '{p_full}' '{org_base_dir}'")
+                peer_machine = peer.get('machine')
+                peer_ip = machines.get(peer_machine, {}).get('ip', '') if peer_machine else ''
+                linhas.append(f"registerAndEnrollPeer '{p_name}' '{p_pass}' '{ca_url}' '{ca_name}' '{p_full}' '{org_base_dir}' '{peer_ip}'")
 
             # registra e matricula admin da org
             admin_name = f"{org_name}admin"
@@ -163,7 +165,9 @@ command -v fabric-ca-client >/dev/null || {
             o_name = node['name']
             o_pass = f"{o_name}pw"
             o_full = f"{o_name}.{domain}"
-            linhas.append(f"registerAndEnrollOrdererNode '{o_name}' '{o_pass}' '{ord_ca_url}' '{ord_ca_name}' '{o_full}' '{ord_base_dir}'")
+            node_machine = node.get('machine')
+            node_ip = machines.get(node_machine, {}).get('ip', '') if node_machine else ''
+            linhas.append(f"registerAndEnrollOrdererNode '{o_name}' '{o_pass}' '{ord_ca_url}' '{ord_ca_name}' '{o_full}' '{ord_base_dir}' '{node_ip}'")
 
         # registra e matricula o admin do serviço de ordenação
         linhas.append(f"registerAndEnrollOrgAdmin 'ordererAdmin' 'ordererAdminpw' '{ord_ca_url}' '{ord_ca_name}' '{ord_base_dir}' 'Admin@{domain}'")
@@ -224,22 +228,28 @@ function enrollTLS() {
     local user=$4
     local pass=$5
     local hostname=$6
+    local ip=${7:-}   # IP real do nó — opcional, usado em modo distribuído para IP SANs
 
     infoln "[TLS] Gerando certificados para $hostname"
-    
-    # enroll com perfil TLS 
+
+    # monta os --csr.hosts: sempre hostname + localhost; adiciona IP se fornecido
+    local csr_hosts="--csr.hosts ${hostname} --csr.hosts localhost"
+    if [ -n "$ip" ]; then
+        csr_hosts="$csr_hosts --csr.hosts ${ip}"
+    fi
+
+    # enroll com perfil TLS
     fabric-ca-client enroll -u ${url} \\
         --caname "${ca_name}" \\
         -M "${tls_dir}" \\
         --enrollment.profile tls \\
-        --csr.hosts "${hostname}" \\
-        --csr.hosts localhost
+        ${csr_hosts}
 
     # organiza arquivos para o padrao fabric
     cp "${tls_dir}/tlscacerts/"* "${tls_dir}/ca.crt"
     cp "${tls_dir}/signcerts/"* "${tls_dir}/server.crt"
     cp "${tls_dir}/keystore/"* "${tls_dir}/server.key"
-    
+
     rm -rf "${tls_dir}/cacerts" "${tls_dir}/keystore" "${tls_dir}/signcerts" "${tls_dir}/user"
 }
 
@@ -251,10 +261,11 @@ function registerAndEnrollPeer() {
     local ca_name=$4
     local hostname=$5
     local base_dir=$6
-    
+    local ip=${7:-}   # IP real do nó — opcional, para IP SANs no certificado TLS
+
     infoln "Configurando Peer: ${name}"
 
-    # Register 
+    # Register
     fabric-ca-client register --caname "${ca_name}" \\
         --id.name "${name}" --id.secret "${secret}" --id.type peer \\
         || true
@@ -271,7 +282,7 @@ function registerAndEnrollPeer() {
 
     # Enroll TLS
     local tls_dir="${base_dir}/peers/${hostname}/tls"
-    enrollTLS "${url//:\\/\\//://${name}:${secret}@}" "${ca_name}" "${tls_dir}" "${name}" "${secret}" "${hostname}"
+    enrollTLS "${url//:\\/\\//://${name}:${secret}@}" "${ca_name}" "${tls_dir}" "${name}" "${secret}" "${hostname}" "${ip}"
 }
 
 # registra e faz enroll de um orderer
@@ -282,7 +293,8 @@ function registerAndEnrollOrdererNode() {
     local ca_name=$4
     local hostname=$5
     local base_dir=$6
-    
+    local ip=${7:-}   # IP real do nó — opcional, para IP SANs no certificado TLS
+
     infoln "Configurando Orderer Node: ${name}"
 
     # Register
@@ -302,7 +314,7 @@ function registerAndEnrollOrdererNode() {
 
     # Enroll TLS
     local tls_dir="${base_dir}/orderers/${hostname}/tls"
-    enrollTLS "${url//:\\/\\//://${name}:${secret}@}" "${ca_name}" "${tls_dir}" "${name}" "${secret}" "${hostname}"
+    enrollTLS "${url//:\\/\\//://${name}:${secret}@}" "${ca_name}" "${tls_dir}" "${name}" "${secret}" "${hostname}" "${ip}"
 }
 
 # registra e faz enroll de um admin de Organização
