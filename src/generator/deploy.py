@@ -153,10 +153,15 @@ class ChaincodeDeployGenerator:
             go_bin_dir = self.paths.base_dir.parent / "go" / "bin"
             go_cmd = str(go_bin_dir / "go") if (go_bin_dir / "go").exists() else "go"
             co.infoln(f"Compilando chaincode {cc['name']} localmente para Linux...")
-            os.system(
+            ret = os.system(
                 f"cd {abs_cc_path} && "
                 f"GOOS=linux GOARCH=amd64 {go_cmd} build -o chaincode"
             )
+            if ret != 0:
+                raise RuntimeError(
+                    f"Falha ao compilar chaincode '{cc['name']}' com '{go_cmd}'. "
+                    f"Verifique se o Go está instalado em {go_bin_dir} ou no PATH do sistema."
+                )
 
             self._create_ccaas_package(cc, package_file)
 
