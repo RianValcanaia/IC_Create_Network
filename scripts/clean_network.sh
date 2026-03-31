@@ -9,18 +9,18 @@ NETWORK_NAME="${NETWORK_BASE}_net"
 
 infoln "Iniciando limpeza da infraestrutura para a rede: $NETWORK_BASE"
 
-# derrubar via Docker Compose 
-CA_COMPOSE="$PROJECT_ROOT/network/compose/compose-ca.yaml"
-if [ -f "$CA_COMPOSE" ]; then 
-    infoln "Derrubando containers da CA..." 
-    docker-compose -f "$CA_COMPOSE" -p "${NETWORK_BASE}_ca" down --volumes --remove-orphans 
-fi
+# derrubar via Docker Compose (cobre modo local e distribuído com nomes por máquina)
+for CA_COMPOSE in "$PROJECT_ROOT"/network/compose/compose-ca*.yaml; do
+    [ -f "$CA_COMPOSE" ] || continue
+    infoln "Derrubando containers CA ($CA_COMPOSE)..."
+    docker-compose -f "$CA_COMPOSE" -p "${NETWORK_BASE}_ca" down --volumes --remove-orphans || true
+done
 
-NODE_COMPOSE="$PROJECT_ROOT/network/compose/compose-nodes.yaml"
-if [ -f "$NODE_COMPOSE" ]; then 
-    infoln "Derrubando containers dos nós..." 
-    docker-compose -f "$NODE_COMPOSE" -p "${NETWORK_BASE}_net" down --volumes --remove-orphans 
-fi
+for NODE_COMPOSE in "$PROJECT_ROOT"/network/compose/compose-nodes*.yaml; do
+    [ -f "$NODE_COMPOSE" ] || continue
+    infoln "Derrubando containers de nós ($NODE_COMPOSE)..."
+    docker-compose -f "$NODE_COMPOSE" -p "${NETWORK_BASE}_net" down --volumes --remove-orphans || true
+done
 
 # forçar parada de qualquer container órfão na rede 
 infoln "Limpando containers remanescentes na rede $NETWORK_NAME..."

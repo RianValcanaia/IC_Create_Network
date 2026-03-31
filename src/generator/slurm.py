@@ -7,8 +7,10 @@ fases do deploy, usando os paths do cluster (NFS). O script deve ser copiado
 manualmente para o login node e submetido via sbatch.
 
 Fluxo dentro do job:
-  [Fase 0] Prereqs       — srun no coordenador (baixa binários Fabric para o NFS)
-  [Fase 1] CAs           — srun em paralelo em todos os nós
+  [Fase -2] Clean nós    — srun em paralelo em todos os nós (derruba containers)
+  [Fase -1] Clean NFS    — srun no coordenador (limpa artefatos gerados, preserva bin/)
+  [Fase 0]  Prereqs      — srun no coordenador (verifica/baixa binários Fabric)
+  [Fase 1]  CAs          — srun em paralelo em todos os nós
   [Fase 2] Enroll        — srun no coordenador
   [Fase 3] Artifacts     — srun no coordenador
   [Fase 4] Nodes         — srun em paralelo em todos os nós
@@ -144,6 +146,22 @@ class SlurmDeployGenerator:
             f"#SBATCH --error={log_dir}/slurm-%j-fabric-deploy.err",
             "",
             'set -euo pipefail',
+            "",
+            "# ── Fase -2: Clean nos (paralelo) ───────────────────────────────",
+        ]
+
+        for name, m in machines.items():
+            node = m['slurm_node']
+            lines.append(
+                f'srun --nodes=1 --ntasks=1 --nodelist={node} '
+                f'sg docker -c "python3 main.py --start --machine {name} --phase clean" &'
+            )
+        lines += [
+            "wait",
+            "",
+            "# ── Fase -1: Clean artefatos NFS (coordenador) ───────────────────",
+            f'srun --nodes=1 --ntasks=1 --nodelist={coord_node} '
+            f'sg docker -c "python3 main.py --setup --phase clean"',
             "",
             "# ── Fase 0: Pré-requisitos (coordenador) ─────────────────────────",
             f'srun --nodes=1 --ntasks=1 --nodelist={coord_node} '

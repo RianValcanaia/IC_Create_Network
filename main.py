@@ -276,7 +276,14 @@ def _start_phase(controller, config, paths, machine, phase):
     paths.ensure_network_dirs()
     co.headerln(f"[SLURM] --start --machine {machine} --phase {phase}")
 
-    if phase == 'cas':
+    if phase == 'clean':
+        compose_dir = paths.network_dir / "compose"
+        extra = {
+            "COMPOSE_FILE_CA":    str(compose_dir / f"compose-ca-{machine}.yaml"),
+            "COMPOSE_FILE_NODES": str(compose_dir / f"compose-nodes-{machine}.yaml"),
+        }
+        controller.run_script("clean_node.sh", extra_env=extra)
+    elif phase == 'cas':
         compose_ca = _cria_compose_ca(config, paths, machine=machine)
         _start_CA(controller, compose_path=compose_ca)
     elif phase == 'nodes':
@@ -286,7 +293,7 @@ def _start_phase(controller, config, paths, machine, phase):
     else:
         raise RuntimeError(
             f"Fase desconhecida para --start: '{phase}'. "
-            f"Valores válidos: cas, nodes, ccaas"
+            f"Valores válidos: clean, cas, nodes, ccaas"
         )
 
 
@@ -304,7 +311,9 @@ def _setup_phase(controller, config, paths, phase):
     paths.ensure_network_dirs()
     co.headerln(f"[SLURM] --setup --phase {phase}")
 
-    if phase == 'prereqs':
+    if phase == 'clean':
+        controller.run_script("clean_network.sh")
+    elif phase == 'prereqs':
         _verifica_prerequisitos(controller)
     elif phase == 'enroll':
         _register_enroll(controller, config, paths, distributed=True)
