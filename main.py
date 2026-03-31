@@ -304,7 +304,9 @@ def _setup_phase(controller, config, paths, phase):
     paths.ensure_network_dirs()
     co.headerln(f"[SLURM] --setup --phase {phase}")
 
-    if phase == 'enroll':
+    if phase == 'prereqs':
+        _verifica_prerequisitos(controller)
+    elif phase == 'enroll':
         _register_enroll(controller, config, paths, distributed=True)
     elif phase == 'artifacts':
         _cria_artefatos(controller, config, paths)
@@ -315,7 +317,7 @@ def _setup_phase(controller, config, paths, phase):
     else:
         raise RuntimeError(
             f"Fase desconhecida para --setup: '{phase}'. "
-            f"Valores válidos: enroll, artifacts, channels, chaincode"
+            f"Valores válidos: prereqs, enroll, artifacts, channels, chaincode"
         )
 
 
