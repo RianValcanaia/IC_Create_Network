@@ -221,4 +221,9 @@ class SlurmDeployGenerator:
                 )
             lines += ["wait", ""]
 
+        lines += [
+            "# ── Mantém o job vivo até --time expirar ou scancel ─────────────",
+            "sleep infinity",
+        ]
+
         return "\n".join(lines) + "\n"
