@@ -151,18 +151,18 @@ class SlurmDeployGenerator:
             node = m['slurm_node']
             lines.append(
                 f'srun --nodes=1 --ntasks=1 --nodelist={node} '
-                f'python3 main.py --start --machine {name} --phase cas &'
+                f'sg docker -c "python3 main.py --start --machine {name} --phase cas" &'
             )
         lines += ["wait", ""]
 
         lines += [
             "# ── Fase 2: Enrollment (coordenador) ────────────────────────────",
-            f"srun --nodes=1 --ntasks=1 --nodelist={coord_node} "
-            f"python3 main.py --setup --phase enroll",
+            f'srun --nodes=1 --ntasks=1 --nodelist={coord_node} '
+            f'sg docker -c "python3 main.py --setup --phase enroll"',
             "",
             "# ── Fase 3: Artefatos (coordenador) ─────────────────────────────",
-            f"srun --nodes=1 --ntasks=1 --nodelist={coord_node} "
-            f"python3 main.py --setup --phase artifacts",
+            f'srun --nodes=1 --ntasks=1 --nodelist={coord_node} '
+            f'sg docker -c "python3 main.py --setup --phase artifacts"',
             "",
             "# ── Fase 4: Peers e orderers em paralelo ─────────────────────────",
         ]
@@ -171,18 +171,18 @@ class SlurmDeployGenerator:
             node = m['slurm_node']
             lines.append(
                 f'srun --nodes=1 --ntasks=1 --nodelist={node} '
-                f'python3 main.py --start --machine {name} --phase nodes &'
+                f'sg docker -c "python3 main.py --start --machine {name} --phase nodes" &'
             )
         lines += ["wait", ""]
 
         lines += [
             "# ── Fase 5: Canais (coordenador) ────────────────────────────────",
-            f"srun --nodes=1 --ntasks=1 --nodelist={coord_node} "
-            f"python3 main.py --setup --phase channels",
+            f'srun --nodes=1 --ntasks=1 --nodelist={coord_node} '
+            f'sg docker -c "python3 main.py --setup --phase channels"',
             "",
             "# ── Fase 6: Lifecycle do chaincode (coordenador) ─────────────────",
-            f"srun --nodes=1 --ntasks=1 --nodelist={coord_node} "
-            f"python3 main.py --setup --phase chaincode",
+            f'srun --nodes=1 --ntasks=1 --nodelist={coord_node} '
+            f'sg docker -c "python3 main.py --setup --phase chaincode"',
             "",
         ]
 
@@ -194,7 +194,7 @@ class SlurmDeployGenerator:
                 node = machines[name]['slurm_node']
                 lines.append(
                     f'srun --nodes=1 --ntasks=1 --nodelist={node} '
-                    f'python3 main.py --start --machine {name} --phase ccaas &'
+                    f'sg docker -c "python3 main.py --start --machine {name} --phase ccaas" &'
                 )
             lines += ["wait", ""]
 
