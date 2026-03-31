@@ -4,7 +4,7 @@
 
 source $(dirname "$0")/utils.sh 
 
-COMPOSE_FILE="$NETWORK_DIR/compose/compose-nodes.yaml" 
+COMPOSE_FILE="${COMPOSE_FILE:-$NETWORK_DIR/compose/compose-nodes.yaml}"
 
 if [ ! -f "$COMPOSE_FILE" ]; then
     errorln "Arquivo não encontrado: $COMPOSE_FILE"

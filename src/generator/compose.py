@@ -145,12 +145,14 @@ class ComposeGenerator:
         }
 
         self.compose_dir.mkdir(parents=True, exist_ok=True)
-        output_path = self.compose_dir / "compose-ca.yaml"
-        
+        filename = f"compose-ca-{self.machine}.yaml" if self.machine else "compose-ca.yaml"
+        output_path = self.compose_dir / filename
+
         with open(output_path, 'w') as f:
             yaml.dump(compose_content, f, sort_keys=False)
-            
+
         co.successln(f"Arquivo gerado: {output_path}")
+        return output_path
 
     # Gera o arquivo que sobe peers, orderers e prepara o peercfg
     def generate_nodes_compose(self):
@@ -318,10 +320,12 @@ class ComposeGenerator:
             'services': services
         }
 
-        output_path = self.compose_dir / "compose-nodes.yaml"
+        filename = f"compose-nodes-{self.machine}.yaml" if self.machine else "compose-nodes.yaml"
+        output_path = self.compose_dir / filename
         with open(output_path, 'w') as f:
             yaml.dump(compose_dict, f, sort_keys=False)
         co.successln(f"Arquivo de nós gerado: {output_path}")
+        return output_path
 
         # ── PATCH: gerar prometheus.yml automaticamente após o compose ────────
         self._generate_prometheus_config()

@@ -114,12 +114,13 @@ def _exporta_network_contexto(config, paths):
 
 def _cria_compose_ca(config, paths, machine=None):
     co.infoln("Gerando arquivos docker-compose para ca")
-    ComposeGenerator(config, paths, machine=machine).generate_ca_compose()
+    return ComposeGenerator(config, paths, machine=machine).generate_ca_compose()
 
-def _start_CA(controller):
+def _start_CA(controller, compose_path=None):
     co.infoln("Iniciando os servidores CA")
+    extra = {"COMPOSE_FILE": str(compose_path)} if compose_path else {}
     try:
-        controller.run_script("start_cas.sh")
+        controller.run_script("start_cas.sh", extra_env=extra)
     except Exception as e:
         co.errorln(f"\n Erro ao iniciar servidores CA: {e}")
         return
@@ -152,9 +153,10 @@ def _cria_artefatos(controller, config, paths):
 
 def _inicializa_nos(controller, config, paths, machine=None):
     co.infoln("Gerando arquivos docker-compose para peers e orderers")
-    ComposeGenerator(config, paths, machine=machine).generate_nodes_compose()
+    compose_path = ComposeGenerator(config, paths, machine=machine).generate_nodes_compose()
+    extra = {"COMPOSE_FILE": str(compose_path)} if machine else {}
     try:
-        controller.run_script("start_nodes.sh")
+        controller.run_script("start_nodes.sh", extra_env=extra)
     except Exception as e:
         co.errorln(f"\n Erro ao rodar 'start_nodes.sh': {e}")
         return
@@ -220,8 +222,8 @@ def _network_up(controller, config, paths, machine=None):
             )
         co.infoln(f"Modo distribuído: iniciando componentes de '{machine}' "
                   f"(IP: {machines_cfg[machine]['ip']})")
-        _cria_compose_ca(config, paths, machine=machine)
-        _start_CA(controller)
+        compose_ca = _cria_compose_ca(config, paths, machine=machine)
+        _start_CA(controller, compose_path=compose_ca)
         _inicializa_nos(controller, config, paths, machine=machine)
         _start_chaincodes(controller, config, paths, machine)
         return
@@ -275,8 +277,8 @@ def _start_phase(controller, config, paths, machine, phase):
     co.headerln(f"[SLURM] --start --machine {machine} --phase {phase}")
 
     if phase == 'cas':
-        _cria_compose_ca(config, paths, machine=machine)
-        _start_CA(controller)
+        compose_ca = _cria_compose_ca(config, paths, machine=machine)
+        _start_CA(controller, compose_path=compose_ca)
     elif phase == 'nodes':
         _inicializa_nos(controller, config, paths, machine=machine)
     elif phase == 'ccaas':

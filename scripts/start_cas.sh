@@ -9,7 +9,7 @@ if [ -z "$NETWORK_DIR" ]; then
     NETWORK_DIR="$(cd "$(dirname "$0")/../network" && pwd)"
 fi
 
-COMPOSE_FILE="$NETWORK_DIR/compose/compose-ca.yaml"
+COMPOSE_FILE="${COMPOSE_FILE:-$NETWORK_DIR/compose/compose-ca.yaml}"
 
 # verificacao de seguranca
 if [ ! -f "$COMPOSE_FILE" ]; then
