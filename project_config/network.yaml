@@ -7,9 +7,7 @@ network:
 
 # Configuração para deploy distribuído via SLURM.
 # cluster_project_dir: path do projeto no NFS compartilhado entre o login node e os nós de compute.
-# login_node: host acessível via SSH a partir da máquina local que tem acesso ao sbatch.
 slurm:
-  login_node: "baia0"
   cluster_project_dir: "/mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network"
 
 # Mapeamento de máquinas para deploy distribuído.

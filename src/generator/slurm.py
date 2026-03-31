@@ -1,14 +1,10 @@
 # Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
 """
-Orquestrador de deploy distribuído via SLURM.
+Gerador do script de deploy distribuído via SLURM.
 
-Responsável por ler a topologia do network.yaml, gerar um único script bash
-com todas as fases do deploy e submetê-lo como um único job SLURM a partir
-de uma máquina de login/gerenciamento externa aos nós de compute.
-
-O job aloca todos os nós de uma vez com --exclusive e --time definidos pelo
-usuário. Dentro do job, cada fase usa 'srun --nodelist=<nó>' para direcionar
-o trabalho ao nó correto — fases paralelas rodam em background com 'wait'.
+Lê a topologia do network.yaml e gera um único script bash com todas as
+fases do deploy, usando os paths do cluster (NFS). O script deve ser copiado
+manualmente para o login node e submetido via sbatch.
 
 Fluxo dentro do job:
   [Fase 1] CAs           — srun em paralelo em todos os nós
@@ -20,14 +16,13 @@ Fluxo dentro do job:
   [Fase 7] CCAAS         — srun em paralelo nos nós com chaincode
 
 Requisitos:
-  - Máquina de submissão tem acesso ao sbatch (nó de login do cluster)
   - Todos os nós de compute acessam o mesmo filesystem compartilhado (NFS/Lustre)
   - Docker disponível nos nós de compute
   - Cada máquina em network.yaml possui os campos 'slurm_node' e 'ip'
   - Exatamente uma máquina marcada como 'coordinator: true'
+  - Campo 'slurm.cluster_project_dir' definido em network.yaml
 """
 
-import subprocess
 from ..utils import Colors as co
 
 
@@ -43,8 +38,8 @@ class SlurmDeployGenerator:
 
     def deploy(self, time):
         """
-        Gera um script bash com todas as fases do deploy e o submete como um
-        único job SLURM via SSH no login node. Retorna imediatamente após a submissão.
+        Gera o script bash com todas as fases do deploy usando os paths do cluster.
+        Salva localmente e imprime as instruções para copiar e submeter manualmente.
 
         Parâmetros:
           time — duração máxima do job no formato HH:MM:SS (ex: '03:00:00')
@@ -77,55 +72,47 @@ class SlurmDeployGenerator:
             )
 
         slurm_cfg = self.config['network_topology'].get('slurm', {})
-        login_node = slurm_cfg.get('login_node')
         cluster_project_dir = slurm_cfg.get('cluster_project_dir')
-        if not login_node:
-            raise RuntimeError(
-                "Campo 'slurm.login_node' não encontrado no network.yaml."
-            )
         if not cluster_project_dir:
             raise RuntimeError(
                 "Campo 'slurm.cluster_project_dir' não encontrado no network.yaml."
             )
 
-        coord_node          = machines[coordinator]['slurm_node']
-        cluster_log_dir     = f"{cluster_project_dir}/network/logs"
-        local_log_dir       = self.paths.network_dir / "logs"
+        coord_node      = machines[coordinator]['slurm_node']
+        cluster_log_dir = f"{cluster_project_dir}/network/logs"
+        local_log_dir   = self.paths.network_dir / "logs"
         local_log_dir.mkdir(parents=True, exist_ok=True)
 
         nodelist  = ",".join(m['slurm_node'] for m in machines.values())
         num_nodes = len(machines)
 
-        co.headerln("Deploy distribuído via SLURM")
+        co.headerln("Gerando script de deploy distribuído via SLURM")
         co.infoln(f"Coordenador       : {coordinator} ({coord_node})")
         co.infoln(f"Nós               : {nodelist}")
-        co.infoln(f"Login node (SSH)  : {login_node}")
         co.infoln(f"Projeto no cluster: {cluster_project_dir}")
         co.infoln(f"Tempo             : {time}")
 
         script = self._build_script(
-            machines            = machines,
-            coordinator         = coordinator,
-            coord_node          = coord_node,
-            project_dir         = cluster_project_dir,
-            log_dir             = cluster_log_dir,
-            nodelist            = nodelist,
-            num_nodes           = num_nodes,
-            time                = time,
+            machines    = machines,
+            coordinator = coordinator,
+            coord_node  = coord_node,
+            project_dir = cluster_project_dir,
+            log_dir     = cluster_log_dir,
+            nodelist    = nodelist,
+            num_nodes   = num_nodes,
+            time        = time,
         )
 
-        local_script_path = local_log_dir / "fabric-deploy.sh"
+        local_script_path  = local_log_dir / "fabric-deploy.sh"
+        remote_script_path = f"{cluster_log_dir}/fabric-deploy.sh"
         local_script_path.write_text(script)
         local_script_path.chmod(0o755)
-        co.actionln(f"Script gerado localmente: {local_script_path}")
 
-        remote_script_path = f"{cluster_log_dir}/fabric-deploy.sh"
-        jid = self._sbatch(login_node, local_script_path, remote_script_path, cluster_log_dir)
-        co.successln(
-            f"\nJob submetido: {jid}\n"
-            f"Acompanhe com : ssh {login_node} squeue -j {jid}\n"
-            f"Log em        : {cluster_log_dir}/slurm-{jid}-fabric-deploy.log"
-        )
+        co.successln(f"\nScript gerado: {local_script_path}")
+        co.infoln("\nPróximos passos:")
+        co.infoln(f"  1. scp {local_script_path} <usuario>@<login_node>:{remote_script_path}")
+        co.infoln(f"  2. ssh <login_node>")
+        co.infoln(f"  3. sbatch {remote_script_path}")
 
     # ──────────────────────────────────────────────────────────────────────────
     # Geração do script bash
@@ -212,44 +199,3 @@ class SlurmDeployGenerator:
             lines += ["wait", ""]
 
         return "\n".join(lines) + "\n"
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # Submissão do job
-    # ──────────────────────────────────────────────────────────────────────────
-
-    def _sbatch(self, login_node, local_script_path, remote_script_path, remote_log_dir):
-        """
-        Copia o script para o login node via scp, cria o diretório de logs remoto
-        e submete via 'ssh <login_node> sbatch'. Retorna o job ID numérico.
-        """
-        # Garante que o diretório de logs existe no cluster
-        mkdir = subprocess.run(
-            ["ssh", login_node, f"mkdir -p {remote_log_dir}"],
-            capture_output=True, text=True,
-        )
-        if mkdir.returncode != 0:
-            raise RuntimeError(
-                f"Falha ao criar diretório de logs no cluster:\n{mkdir.stderr.strip()}"
-            )
-
-        # Copia o script para o cluster
-        scp = subprocess.run(
-            ["scp", str(local_script_path), f"{login_node}:{remote_script_path}"],
-            capture_output=True, text=True,
-        )
-        if scp.returncode != 0:
-            raise RuntimeError(
-                f"Falha ao copiar script para {login_node}:\n{scp.stderr.strip()}"
-            )
-        co.actionln(f"Script copiado para {login_node}:{remote_script_path}")
-
-        # Submete o job
-        result = subprocess.run(
-            ["ssh", login_node, f"sbatch --parsable {remote_script_path}"],
-            capture_output=True, text=True,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                f"Falha ao submeter job SLURM via ssh {login_node}:\n{result.stderr.strip()}"
-            )
-        return result.stdout.strip().split(";")[0]
