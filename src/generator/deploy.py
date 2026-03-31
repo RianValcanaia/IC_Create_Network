@@ -148,10 +148,14 @@ class ChaincodeDeployGenerator:
             ).resolve()
 
             # Compila o binário Go localmente para Linux antes de empacotar
+            # go_bin_dir: procura Go em <base_dir>/../go/bin (NFS do cluster)
+            # e cai no PATH do sistema se não encontrar.
+            go_bin_dir = self.paths.base_dir.parent / "go" / "bin"
+            go_cmd = str(go_bin_dir / "go") if (go_bin_dir / "go").exists() else "go"
             co.infoln(f"Compilando chaincode {cc['name']} localmente para Linux...")
             os.system(
                 f"cd {abs_cc_path} && "
-                f"GOOS=linux GOARCH=amd64 go build -o chaincode"
+                f"GOOS=linux GOARCH=amd64 {go_cmd} build -o chaincode"
             )
 
             self._create_ccaas_package(cc, package_file)
