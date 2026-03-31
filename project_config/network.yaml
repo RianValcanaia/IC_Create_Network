@@ -5,6 +5,13 @@ network:
   name: "FabricNetwork"
   domain: "exemplo.com"  # Domínio base para todos os nós, nos serão nome.exemplo.com
 
+# Configuração para deploy distribuído via SLURM.
+# cluster_project_dir: path do projeto no NFS compartilhado entre o login node e os nós de compute.
+# login_node: host acessível via SSH a partir da máquina local que tem acesso ao sbatch.
+slurm:
+  login_node: "baia0"
+  cluster_project_dir: "/mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network"
+
 # Mapeamento de máquinas para deploy distribuído.
 # Cada componente pode receber o campo `machine` com o nome de uma máquina aqui definida.
 # Ao rodar `--up --machine <nome>`, apenas os componentes dessa máquina sobem.

@@ -44,7 +44,7 @@ class SlurmDeployGenerator:
     def deploy(self, time):
         """
         Gera um script bash com todas as fases do deploy e o submete como um
-        único job SLURM. Retorna imediatamente após a submissão.
+        único job SLURM via SSH no login node. Retorna imediatamente após a submissão.
 
         Parâmetros:
           time — duração máxima do job no formato HH:MM:SS (ex: '03:00:00')
@@ -76,40 +76,55 @@ class SlurmDeployGenerator:
                 "O coordenador é o nó que executa enrollment, canais e lifecycle."
             )
 
-        coord_node  = machines[coordinator]['slurm_node']
-        project_dir = str(self.paths.base_dir)
-        log_dir     = self.paths.network_dir / "logs"
-        log_dir.mkdir(parents=True, exist_ok=True)
+        slurm_cfg = self.config['network_topology'].get('slurm', {})
+        login_node = slurm_cfg.get('login_node')
+        cluster_project_dir = slurm_cfg.get('cluster_project_dir')
+        if not login_node:
+            raise RuntimeError(
+                "Campo 'slurm.login_node' não encontrado no network.yaml."
+            )
+        if not cluster_project_dir:
+            raise RuntimeError(
+                "Campo 'slurm.cluster_project_dir' não encontrado no network.yaml."
+            )
 
-        nodelist    = ",".join(m['slurm_node'] for m in machines.values())
-        num_nodes   = len(machines)
+        coord_node          = machines[coordinator]['slurm_node']
+        cluster_log_dir     = f"{cluster_project_dir}/network/logs"
+        local_log_dir       = self.paths.network_dir / "logs"
+        local_log_dir.mkdir(parents=True, exist_ok=True)
+
+        nodelist  = ",".join(m['slurm_node'] for m in machines.values())
+        num_nodes = len(machines)
 
         co.headerln("Deploy distribuído via SLURM")
-        co.infoln(f"Coordenador : {coordinator} ({coord_node})")
-        co.infoln(f"Nós         : {nodelist}")
-        co.infoln(f"Tempo       : {time}")
+        co.infoln(f"Coordenador       : {coordinator} ({coord_node})")
+        co.infoln(f"Nós               : {nodelist}")
+        co.infoln(f"Login node (SSH)  : {login_node}")
+        co.infoln(f"Projeto no cluster: {cluster_project_dir}")
+        co.infoln(f"Tempo             : {time}")
 
-        script      = self._build_script(
-            machines    = machines,
-            coordinator = coordinator,
-            coord_node  = coord_node,
-            project_dir = project_dir,
-            log_dir     = str(log_dir),
-            nodelist    = nodelist,
-            num_nodes   = num_nodes,
-            time        = time,
+        script = self._build_script(
+            machines            = machines,
+            coordinator         = coordinator,
+            coord_node          = coord_node,
+            project_dir         = cluster_project_dir,
+            log_dir             = cluster_log_dir,
+            nodelist            = nodelist,
+            num_nodes           = num_nodes,
+            time                = time,
         )
 
-        script_path = log_dir / "fabric-deploy.sh"
-        script_path.write_text(script)
-        script_path.chmod(0o755)
-        co.actionln(f"Script gerado: {script_path}")
+        local_script_path = local_log_dir / "fabric-deploy.sh"
+        local_script_path.write_text(script)
+        local_script_path.chmod(0o755)
+        co.actionln(f"Script gerado localmente: {local_script_path}")
 
-        jid = self._sbatch(script_path)
+        remote_script_path = f"{cluster_log_dir}/fabric-deploy.sh"
+        jid = self._sbatch(login_node, local_script_path, remote_script_path, cluster_log_dir)
         co.successln(
             f"\nJob submetido: {jid}\n"
-            f"Acompanhe com : squeue -j {jid}\n"
-            f"Log em        : {log_dir}/slurm-{jid}-fabric-deploy.log"
+            f"Acompanhe com : ssh {login_node} squeue -j {jid}\n"
+            f"Log em        : {cluster_log_dir}/slurm-{jid}-fabric-deploy.log"
         )
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -202,18 +217,39 @@ class SlurmDeployGenerator:
     # Submissão do job
     # ──────────────────────────────────────────────────────────────────────────
 
-    def _sbatch(self, script_path):
+    def _sbatch(self, login_node, local_script_path, remote_script_path, remote_log_dir):
         """
-        Submete o script gerado via sbatch e retorna o job ID numérico.
-        --parsable faz o sbatch retornar apenas 'JOBID' ou 'JOBID;CLUSTER'.
+        Copia o script para o login node via scp, cria o diretório de logs remoto
+        e submete via 'ssh <login_node> sbatch'. Retorna o job ID numérico.
         """
+        # Garante que o diretório de logs existe no cluster
+        mkdir = subprocess.run(
+            ["ssh", login_node, f"mkdir -p {remote_log_dir}"],
+            capture_output=True, text=True,
+        )
+        if mkdir.returncode != 0:
+            raise RuntimeError(
+                f"Falha ao criar diretório de logs no cluster:\n{mkdir.stderr.strip()}"
+            )
+
+        # Copia o script para o cluster
+        scp = subprocess.run(
+            ["scp", str(local_script_path), f"{login_node}:{remote_script_path}"],
+            capture_output=True, text=True,
+        )
+        if scp.returncode != 0:
+            raise RuntimeError(
+                f"Falha ao copiar script para {login_node}:\n{scp.stderr.strip()}"
+            )
+        co.actionln(f"Script copiado para {login_node}:{remote_script_path}")
+
+        # Submete o job
         result = subprocess.run(
-            ["sbatch", "--parsable", str(script_path)],
-            capture_output=True,
-            text=True,
+            ["ssh", login_node, f"sbatch --parsable {remote_script_path}"],
+            capture_output=True, text=True,
         )
         if result.returncode != 0:
             raise RuntimeError(
-                f"Falha ao submeter job SLURM:\n{result.stderr.strip()}"
+                f"Falha ao submeter job SLURM via ssh {login_node}:\n{result.stderr.strip()}"
             )
         return result.stdout.strip().split(";")[0]
