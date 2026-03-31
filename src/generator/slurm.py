@@ -134,6 +134,19 @@ class SlurmDeployGenerator:
             if cc.get('machine')
         ))
 
+        versions   = self.config['env_versions']['versions']
+        images_cfg = self.config['env_versions']['images']
+        img_prefix = images_cfg['org_hyperledger']
+        fabric_v   = versions['fabric']
+        ca_v       = versions['fabric_ca']
+
+        pull_cmd = (
+            f'docker pull {img_prefix}/fabric-ca:{ca_v} && '
+            f'docker pull {img_prefix}/fabric-peer:{fabric_v} && '
+            f'docker pull {img_prefix}/fabric-orderer:{fabric_v} && '
+            f'docker pull {img_prefix}/fabric-ccenv:{fabric_v}'
+        )
+
         lines = [
             "#!/bin/bash",
             f"#SBATCH --job-name=fabric-deploy",
@@ -146,6 +159,18 @@ class SlurmDeployGenerator:
             f"#SBATCH --error={log_dir}/slurm-%j-fabric-deploy.err",
             "",
             'set -euo pipefail',
+            "",
+            "# ── Fase -3: Pull de imagens Docker em todos os nós (paralelo) ───",
+        ]
+
+        for name, m in machines.items():
+            node = m['slurm_node']
+            lines.append(
+                f'srun --nodes=1 --ntasks=1 --nodelist={node} '
+                f'sg docker -c "{pull_cmd}" &'
+            )
+        lines += [
+            "wait",
             "",
             "# ── Fase -2: Clean nos (paralelo) ───────────────────────────────",
         ]
