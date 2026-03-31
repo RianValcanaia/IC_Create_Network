@@ -1,0 +1,10 @@
+#!/bin/bash
+# External builder release script for CCAAS chaincode packages.
+# Copies connection.json from build output to release output so the peer
+# knows the address of the external chaincode service.
+set -euo pipefail
+
+BUILD_OUTPUT=$1
+RELEASE_OUTPUT=$2
+cp "$BUILD_OUTPUT/connection.json" "$RELEASE_OUTPUT/connection.json"
+exit 0

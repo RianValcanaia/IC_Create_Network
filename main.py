@@ -78,11 +78,7 @@ def _wait_for_port(host, port, timeout=60):
 
 def _verifica_prerequisitos(controller):
     co.infoln("Verificando pré-requisitos do sistema")
-    try:
-        controller.run_script("check_reqs.sh")
-    except Exception as e:
-        co.errorln(f"\n Erro ao rodar 'check_reqs.sh': {e}")
-        return
+    controller.run_script("check_reqs.sh")
 
 def _valida_configuracoes(config):
     co.infoln("Validando configurações do arquivo de definição da rede")
@@ -119,11 +115,7 @@ def _cria_compose_ca(config, paths, machine=None):
 def _start_CA(controller, compose_path=None):
     co.infoln("Iniciando os servidores CA")
     extra = {"COMPOSE_FILE": str(compose_path)} if compose_path else {}
-    try:
-        controller.run_script("start_cas.sh", extra_env=extra)
-    except Exception as e:
-        co.errorln(f"\n Erro ao iniciar servidores CA: {e}")
-        return
+    controller.run_script("start_cas.sh", extra_env=extra)
 
 def _register_enroll(controller, config, paths, distributed=False):
     """
@@ -135,31 +127,19 @@ def _register_enroll(controller, config, paths, distributed=False):
     crypto = CryptoGenerator(config, paths, distributed=distributed)
     co.actionln("Gerando script de identidades (register_enroll.sh)...")
     crypto.generate()
-    try:
-        time.sleep(2)
-        controller.run_script("register_enroll.sh")
-    except Exception as e:
-        co.errorln(f"\n Erro ao rodar 'register_enroll.sh': {e}")
-        return
+    time.sleep(2)
+    controller.run_script("register_enroll.sh")
 
 def _cria_artefatos(controller, config, paths):
     co.infoln("Gerando artefatos da rede (configtx.yaml, blocos, canais, etc)")
     ConfigTxGenerator(config, paths).generate()
-    try:
-        controller.run_script("create_artifacts.sh")
-    except Exception as e:
-        co.errorln(f"\n Erro ao rodar 'create_artifacts.sh': {e}")
-        return
+    controller.run_script("create_artifacts.sh")
 
 def _inicializa_nos(controller, config, paths, machine=None):
     co.infoln("Gerando arquivos docker-compose para peers e orderers")
     compose_path = ComposeGenerator(config, paths, machine=machine).generate_nodes_compose()
     extra = {"COMPOSE_FILE": str(compose_path)} if machine else {}
-    try:
-        controller.run_script("start_nodes.sh", extra_env=extra)
-    except Exception as e:
-        co.errorln(f"\n Erro ao rodar 'start_nodes.sh': {e}")
-        return
+    controller.run_script("start_nodes.sh", extra_env=extra)
 
 def _configura_canais(controller, config, paths, distributed=False):
     """
@@ -169,11 +149,7 @@ def _configura_canais(controller, config, paths, distributed=False):
     """
     co.infoln("Configurando canais e fazendo peers entrarem neles")
     ChannelScriptGenerator(config, paths, distributed=distributed).generate_channel_script()
-    try:
-        controller.run_script("create_channel.sh")
-    except Exception as e:
-        co.errorln(f"\n Erro ao rodar 'create_channel.sh': {e}")
-        return
+    controller.run_script("create_channel.sh")
 
 def _deploy_chaincode(controller, config, paths, distributed=False):
     """
@@ -183,20 +159,12 @@ def _deploy_chaincode(controller, config, paths, distributed=False):
     """
     co.infoln("Fazendo deploy de chaincodes")
     ChaincodeDeployGenerator(config, paths, distributed=distributed).generate()
-    try:
-        controller.run_script("deploy_chaincode.sh")
-    except Exception as e:
-        co.errorln(f"\n Erro ao rodar 'deploy_chaincode.sh': {e}")
-        return
+    controller.run_script("deploy_chaincode.sh")
 
 def _start_chaincodes(controller, config, paths, machine):
     co.infoln(f"Iniciando containers CCAAS de '{machine}'")
     ChaincodeDeployGenerator(config, paths).generate_ccaas_start_script(machine)
-    try:
-        controller.run_script("start_chaincodes.sh")
-    except Exception as e:
-        co.errorln(f"\n Erro ao rodar 'start_chaincodes.sh': {e}")
-        return
+    controller.run_script("start_chaincodes.sh")
 
 
 # ──────────────────────────────────────────────────────────────────────────────

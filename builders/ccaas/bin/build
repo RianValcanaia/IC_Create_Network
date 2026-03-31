@@ -1,0 +1,10 @@
+#!/bin/bash
+# External builder build script for CCAAS chaincode packages.
+# CCAAS has no build step — the chaincode runs as an external service.
+# Copies connection.json to the build output directory.
+set -euo pipefail
+
+SOURCE=$1
+OUTPUT=$3
+cp "$SOURCE/connection.json" "$OUTPUT/connection.json"
+exit 0

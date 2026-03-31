@@ -1,0 +1,11 @@
+#!/bin/bash
+# External builder detect script for CCAAS chaincode packages.
+# Returns 0 if this builder handles the package (type == "ccaas"), 1 otherwise.
+set -euo pipefail
+
+METADIR=$2
+type=$(grep '"type"' "$METADIR/metadata.json" | sed 's/.*"type":[ ]*"\([^"]*\)".*/\1/')
+if [ "$type" = "ccaas" ]; then
+    exit 0
+fi
+exit 1
