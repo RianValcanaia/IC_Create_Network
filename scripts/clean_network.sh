@@ -32,12 +32,13 @@ if docker network inspect "$NETWORK_NAME" >/dev/null 2>&1; then
     docker network rm "$NETWORK_NAME" 
 fi
 
-# limpar arquivos gerados 
-if [ -d "$PROJECT_ROOT/network" ]; then 
-    infoln "Limpando diretório network/..." 
-    fix_permissions "$PROJECT_ROOT/network" 
-    docker run --rm -v "$PROJECT_ROOT/network":/data alpine sh -c 'rm -rf /data/*' 
-    rm -rf "$PROJECT_ROOT/network"/* 2>/dev/null || true 
+# limpar arquivos gerados — preserva network/logs/ (contém fabric-deploy.sh e logs do SLURM)
+if [ -d "$PROJECT_ROOT/network" ]; then
+    infoln "Limpando diretório network/ (preservando logs/)..."
+    fix_permissions "$PROJECT_ROOT/network"
+    docker run --rm -v "$PROJECT_ROOT/network":/data alpine sh -c \
+        'find /data -mindepth 1 -maxdepth 1 ! -name logs -exec rm -rf {} +'
+    find "$PROJECT_ROOT/network" -mindepth 1 -maxdepth 1 ! -name logs -exec rm -rf {} + 2>/dev/null || true
 fi
 
 # limpar scripts gerados 

@@ -15,6 +15,11 @@ fi
 # adiciona ./bin local ao PATH temporariamente para verificação
 export PATH="$PROJECT_ROOT/bin:$PATH"
 
+# garante que os binários em bin/ são executáveis (necessário após scp)
+if [ -d "$PROJECT_ROOT/bin" ]; then
+    chmod +x "$PROJECT_ROOT/bin/"* 2>/dev/null || true
+fi
+
 infoln "Verificando pré-requisitos..."
 
 # verificar Docker
