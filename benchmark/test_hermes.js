@@ -46,12 +46,13 @@ const POLLING_TIMEOUT   = 90;   // segundos máximos aguardando ancoragem
 
 // ─── Cenários ─────────────────────────────────────────────────────────────────
 //
-// C1 Baseline  — 1 VU,  5 min  — latência sem concorrência
-// C2 Leve      — 5 VUs, 10 min — comportamento sob uso normal
-// C3 Moderada  — 15 VUs, 10 min — início de degradação
-// C4 Alta      — 30 VUs, 10 min — saturação e limite de throughput
+// C1 Baseline  — 1 VU,    5 min  — latência sem concorrência
+// C2 Leve      — 10 VUs,  10 min — comportamento sob uso normal
+// C3 Moderada  — 100 VUs, 10 min — início de degradação
+// C4 Alta      — 500 VUs, 10 min — saturação e limite de throughput
+// C5 Máxima    — 1000 VUs,10 min — confirmação de plateau
 //
-// Os cenários são sequenciais com 2 min de pausa entre eles
+// Os cenários são sequenciais com buffer entre eles
 // para o sistema estabilizar antes do próximo cenário.
 
 export const options = {
@@ -97,6 +98,17 @@ export const options = {
             tags: { cenario: 'C4_alta' },
             gracefulStop: '720s',
         },
+        // C5 — Carga máxima: confirmação de plateau
+        // startTime: 42min + 10min C4 + 12min graceful + 6min cooldown = 70min
+        // gracefulStop longo: 1000 VUs com polling de 90s precisam de tempo para encerrar
+        C5_maxima: {
+            executor: 'constant-vus',
+            vus: 1000,
+            duration: '10m',
+            startTime: '70m',
+            tags: { cenario: 'C5_maxima' },
+            gracefulStop: '900s',
+        },
     },
 
     // ── Thresholds — critérios de aceitação ───────────────────────────────────
@@ -106,6 +118,7 @@ export const options = {
         'm1_latencia_e2e_ms{cenario:C2_leve}':     ['p(95)<10000'],
         'm1_latencia_e2e_ms{cenario:C3_moderada}': ['p(95)<30000'],
         'm1_latencia_e2e_ms{cenario:C4_alta}':     ['p(95)<90000'],
+        'm1_latencia_e2e_ms{cenario:C5_maxima}':   ['p(95)<120000'],
 
         // M3 — Taxa de sucesso global
         'm3_taxa_sucesso': ['rate>0.90'],  // 90% — mais permissivo para carga extrema
@@ -162,17 +175,6 @@ export default function () {
     }
 
     // ── 2. Polling até ancoragem confirmada ───────────────────────────────────
-    //
-    // Aguarda o campo `ancoradoEm` aparecer no documento MongoDB.
-    // Esse campo é setado pelo hermes-api-service APÓS a confirmação
-    // da transação no Fabric (patch necessário — ver hermes-api-service.patch.ts).
-    //
-    // Checks explícitos garantem visibilidade total no sumário do k6:
-    //   ✓/✗ submit: status 200
-    //   ✓/✗ submit: calcId presente
-    //   ✓/✗ ancoragem: confirmada dentro do timeout
-    //   ✓/✗ ancoragem: latencia e2e dentro do threshold do cenario
-
     let ancorado = false;
     const tPollingStart = Date.now();
 
@@ -193,7 +195,6 @@ export default function () {
         try { doc = JSON.parse(statusRes.body); }
         catch { continue; }
 
-        // Aguarda ancoradoEm (campo setado após confirmação no Fabric)
         if (doc?.ancoradoEm) {
             const tFim = Date.now();
             const latenciaTotal = Math.max(0, tFim - t0);
@@ -203,10 +204,8 @@ export default function () {
             taxaSucesso.add(true);
             ancorado = true;
 
-            // Diagnóstico: tempo gasto só no polling
             latenciaPolling.add(Math.max(0, tFim - tPollingStart));
 
-            // Check explícito de ancoragem — aparece no sumário do k6
             check(doc, {
                 'ancoragem: documento possui ancoradoEm': (d) => !!d.ancoradoEm,
                 'ancoragem: txId presente no documento':   (d) => !!d.txId,
@@ -217,9 +216,6 @@ export default function () {
         }
     }
 
-    // Check explícito de timeout — falha visível no sumário do k6
-    // Não usa fail() para não interromper o cenário, mas registra
-    // a falha em todos os checks relacionados à ancoragem.
     const ancoracaoOk = check(null, {
         'ancoragem: confirmada dentro do timeout': () => ancorado,
     });
@@ -227,8 +223,6 @@ export default function () {
     if (!ancoracaoOk) {
         dosTimeout.add(1);
         taxaSucesso.add(false);
-        // latenciaE2E NÃO recebe valor — M1 mede apenas ancoragens confirmadas
-        // dos_timeout contabiliza separadamente as falhas por timeout
     }
 }
 
@@ -237,11 +231,8 @@ export default function () {
 export function handleSummary(data) {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     return {
-        // Relatório HTML visual
         [`resultados/relatorio_${timestamp}.html`]: htmlReport(data),
-        // Resumo em texto no stdout
         stdout: textSummary(data, { indent: ' ', enableColors: true }),
-        // JSON completo para pós-processamento
         [`resultados/summary_${timestamp}.json`]: JSON.stringify(data, null, 2),
     };
 }

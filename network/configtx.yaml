@@ -1,0 +1,229 @@
+Organizations:
+  - &OrdererOrg
+    Name: OrdererOrg
+    ID: OrdererMSP
+    MSPDir: organizations/ordererOrganizations/exemplo.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Writers:
+        Type: Signature
+        Rule: "OR('OrdererMSP.member')"
+      Admins:
+        Type: Signature
+        Rule: "OR('OrdererMSP.admin')"
+    OrdererEndpoints:
+      - orderer0.exemplo.com:7060
+      - orderer1.exemplo.com:7062
+      - orderer2.exemplo.com:7064
+      - orderer3.exemplo.com:7066
+  - &Org1
+    Name: Org1MSP
+    ID: Org1MSP
+    MSPDir: organizations/peerOrganizations/Org1.exemplo.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('Org1MSP.admin', 'Org1MSP.peer', 'Org1MSP.client')"
+      Writers:
+        Type: Signature
+        Rule: "OR('Org1MSP.admin', 'Org1MSP.client')"
+      Admins:
+        Type: Signature
+        Rule: "OR('Org1MSP.admin')"
+      Endorsement:
+        Type: Signature
+        Rule: "OR('Org1MSP.peer')"
+  - &Org2
+    Name: Org2MSP
+    ID: Org2MSP
+    MSPDir: organizations/peerOrganizations/Org2.exemplo.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('Org2MSP.admin', 'Org2MSP.peer', 'Org2MSP.client')"
+      Writers:
+        Type: Signature
+        Rule: "OR('Org2MSP.admin', 'Org2MSP.client')"
+      Admins:
+        Type: Signature
+        Rule: "OR('Org2MSP.admin')"
+      Endorsement:
+        Type: Signature
+        Rule: "OR('Org2MSP.peer')"
+  - &Org3
+    Name: Org3MSP
+    ID: Org3MSP
+    MSPDir: organizations/peerOrganizations/Org3.exemplo.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('Org3MSP.admin', 'Org3MSP.peer', 'Org3MSP.client')"
+      Writers:
+        Type: Signature
+        Rule: "OR('Org3MSP.admin', 'Org3MSP.client')"
+      Admins:
+        Type: Signature
+        Rule: "OR('Org3MSP.admin')"
+      Endorsement:
+        Type: Signature
+        Rule: "OR('Org3MSP.peer')"
+  - &Org4
+    Name: Org4MSP
+    ID: Org4MSP
+    MSPDir: organizations/peerOrganizations/Org4.exemplo.com/msp
+    Policies:
+      Readers:
+        Type: Signature
+        Rule: "OR('Org4MSP.admin', 'Org4MSP.peer', 'Org4MSP.client')"
+      Writers:
+        Type: Signature
+        Rule: "OR('Org4MSP.admin', 'Org4MSP.client')"
+      Admins:
+        Type: Signature
+        Rule: "OR('Org4MSP.admin')"
+      Endorsement:
+        Type: Signature
+        Rule: "OR('Org4MSP.peer')"
+
+Capabilities:
+  Channel: &ChannelCapabilities
+    V3_0: true
+  Orderer: &OrdererCapabilities
+    V2_0: true
+  Application: &ApplicationCapabilities
+    V2_5: true
+
+Application: &ApplicationDefaults
+  Organizations:
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+    LifecycleEndorsement:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Endorsement"
+    Endorsement:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Endorsement"
+  Capabilities:
+    <<: *ApplicationCapabilities
+
+Orderer: &OrdererDefaults
+  OrdererType: BFT
+  Addresses:
+  BatchTimeout: 2s
+  BatchSize:
+    MaxMessageCount: 500
+    AbsoluteMaxBytes: 10MB
+    PreferredMaxBytes: 2MB
+  SmartBFT:
+    RequestBatchMaxInterval: 200ms
+    RequestForwardTimeout: 2s
+    RequestComplainTimeout: 20s
+    RequestAutoRemoveTimeout: 3m0s
+    ViewChangeResendInterval: 5s
+    ViewChangeTimeout: 20s
+    LeaderHeartbeatTimeout: 1m0s
+    CollectTimeout: 1s
+    IncomingMessageBufferSize: 200
+    RequestPoolSize: 100000
+    LeaderHeartbeatCount: 10
+  ConsenterMapping:
+    - ID: 1
+      Host: orderer0.exemplo.com
+      Port: 7060
+      MSPID: OrdererMSP
+      Identity: organizations/ordererOrganizations/exemplo.com/orderers/orderer0.exemplo.com/msp/signcerts/cert.pem
+      ClientTLSCert: organizations/ordererOrganizations/exemplo.com/orderers/orderer0.exemplo.com/tls/server.crt
+      ServerTLSCert: organizations/ordererOrganizations/exemplo.com/orderers/orderer0.exemplo.com/tls/server.crt
+    - ID: 2
+      Host: orderer1.exemplo.com
+      Port: 7062
+      MSPID: OrdererMSP
+      Identity: organizations/ordererOrganizations/exemplo.com/orderers/orderer1.exemplo.com/msp/signcerts/cert.pem
+      ClientTLSCert: organizations/ordererOrganizations/exemplo.com/orderers/orderer1.exemplo.com/tls/server.crt
+      ServerTLSCert: organizations/ordererOrganizations/exemplo.com/orderers/orderer1.exemplo.com/tls/server.crt
+    - ID: 3
+      Host: orderer2.exemplo.com
+      Port: 7064
+      MSPID: OrdererMSP
+      Identity: organizations/ordererOrganizations/exemplo.com/orderers/orderer2.exemplo.com/msp/signcerts/cert.pem
+      ClientTLSCert: organizations/ordererOrganizations/exemplo.com/orderers/orderer2.exemplo.com/tls/server.crt
+      ServerTLSCert: organizations/ordererOrganizations/exemplo.com/orderers/orderer2.exemplo.com/tls/server.crt
+    - ID: 4
+      Host: orderer3.exemplo.com
+      Port: 7066
+      MSPID: OrdererMSP
+      Identity: organizations/ordererOrganizations/exemplo.com/orderers/orderer3.exemplo.com/msp/signcerts/cert.pem
+      ClientTLSCert: organizations/ordererOrganizations/exemplo.com/orderers/orderer3.exemplo.com/tls/server.crt
+      ServerTLSCert: organizations/ordererOrganizations/exemplo.com/orderers/orderer3.exemplo.com/tls/server.crt
+  Organizations:
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+    BlockValidation:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+  Capabilities:
+    <<: *OrdererCapabilities
+
+Channel: &ChannelDefaults
+  Policies:
+    Readers:
+      Type: ImplicitMeta
+      Rule: "ANY Readers"
+    Writers:
+      Type: ImplicitMeta
+      Rule: "ANY Writers"
+    Admins:
+      Type: ImplicitMeta
+      Rule: "MAJORITY Admins"
+  Capabilities:
+    <<: *ChannelCapabilities
+
+Profiles:
+  Channel-allProfile:
+    <<: *ChannelDefaults
+    Orderer:
+      <<: *OrdererDefaults
+      Organizations:
+        - *OrdererOrg
+      Capabilities: *OrdererCapabilities
+    Application:
+      <<: *ApplicationDefaults
+      Organizations:
+        - *Org1
+        - *Org2
+        - *Org3
+        - *Org4
+      Capabilities: *ApplicationCapabilities
+
+  Channel12Profile:
+    <<: *ChannelDefaults
+    Orderer:
+      <<: *OrdererDefaults
+      Organizations:
+        - *OrdererOrg
+      Capabilities: *OrdererCapabilities
+    Application:
+      <<: *ApplicationDefaults
+      Organizations:
+        - *Org1
+        - *Org2
+      Capabilities: *ApplicationCapabilities
+

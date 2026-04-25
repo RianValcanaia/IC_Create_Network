@@ -1,0 +1,540 @@
+1.5.13: Pulling from hyperledger/fabric-ca
+1.5.13: Pulling from hyperledger/fabric-ca
+602d8ad51b81: Pulling fs layer
+6a8f2b9e77bb: Pulling fs layer
+ed5069ad55c3: Pulling fs layer
+6e8d04642d0a: Pulling fs layer
+6e8d04642d0a: Waiting
+602d8ad51b81: Pulling fs layer
+6a8f2b9e77bb: Pulling fs layer
+ed5069ad55c3: Pulling fs layer
+6e8d04642d0a: Pulling fs layer
+6e8d04642d0a: Waiting
+ed5069ad55c3: Verifying Checksum
+ed5069ad55c3: Download complete
+ed5069ad55c3: Verifying Checksum
+ed5069ad55c3: Download complete
+602d8ad51b81: Verifying Checksum
+602d8ad51b81: Download complete
+602d8ad51b81: Download complete
+602d8ad51b81: Pull complete
+602d8ad51b81: Pull complete
+6a8f2b9e77bb: Verifying Checksum
+6a8f2b9e77bb: Download complete
+6a8f2b9e77bb: Pull complete
+6a8f2b9e77bb: Verifying Checksum
+6a8f2b9e77bb: Download complete
+6e8d04642d0a: Verifying Checksum
+6e8d04642d0a: Download complete
+ed5069ad55c3: Pull complete
+6a8f2b9e77bb: Pull complete
+ed5069ad55c3: Pull complete
+6e8d04642d0a: Pull complete
+Digest: sha256:7e9ae6f0e9be95e300206228c67501a57521aa115369823de4aae592c5e468ec
+Status: Downloaded newer image for hyperledger/fabric-ca:1.5.13
+docker.io/hyperledger/fabric-ca:1.5.13
+6e8d04642d0a: Download complete
+6e8d04642d0a: Pull complete
+Digest: sha256:7e9ae6f0e9be95e300206228c67501a57521aa115369823de4aae592c5e468ec
+Status: Downloaded newer image for hyperledger/fabric-ca:1.5.13
+docker.io/hyperledger/fabric-ca:1.5.13
+3.1.1: Pulling from hyperledger/fabric-peer
+3.1.1: Pulling from hyperledger/fabric-peer
+0622fac788ed: Pulling fs layer
+42dfd3f9a86a: Pulling fs layer
+1126a21fb2d2: Pulling fs layer
+70124a867ad4: Pulling fs layer
+84864ccbe99b: Pulling fs layer
+5e56973fec2a: Pulling fs layer
+70124a867ad4: Waiting
+84864ccbe99b: Waiting
+5e56973fec2a: Waiting
+42dfd3f9a86a: Verifying Checksum
+42dfd3f9a86a: Download complete
+0622fac788ed: Verifying Checksum
+0622fac788ed: Download complete
+70124a867ad4: Verifying Checksum
+70124a867ad4: Download complete
+1126a21fb2d2: Verifying Checksum
+1126a21fb2d2: Download complete
+0622fac788ed: Pulling fs layer
+42dfd3f9a86a: Pulling fs layer
+1126a21fb2d2: Pulling fs layer
+70124a867ad4: Pulling fs layer
+84864ccbe99b: Pulling fs layer
+5e56973fec2a: Pulling fs layer
+70124a867ad4: Waiting
+84864ccbe99b: Waiting
+5e56973fec2a: Waiting
+0622fac788ed: Pull complete
+42dfd3f9a86a: Pull complete
+1126a21fb2d2: Pull complete
+70124a867ad4: Pull complete
+84864ccbe99b: Verifying Checksum
+84864ccbe99b: Download complete
+84864ccbe99b: Pull complete
+42dfd3f9a86a: Verifying Checksum
+42dfd3f9a86a: Download complete
+5e56973fec2a: Verifying Checksum
+5e56973fec2a: Download complete
+5e56973fec2a: Pull complete
+Digest: sha256:58d2f683e88f507d830a3dfc5a968d5ad57551854cc517ac8671545a273a7c3f
+Status: Downloaded newer image for hyperledger/fabric-peer:3.1.1
+docker.io/hyperledger/fabric-peer:3.1.1
+0622fac788ed: Verifying Checksum
+0622fac788ed: Download complete
+70124a867ad4: Verifying Checksum
+70124a867ad4: Download complete
+1126a21fb2d2: Verifying Checksum
+1126a21fb2d2: Download complete
+0622fac788ed: Pull complete
+42dfd3f9a86a: Pull complete
+1126a21fb2d2: Pull complete
+70124a867ad4: Pull complete
+84864ccbe99b: Verifying Checksum
+84864ccbe99b: Download complete
+84864ccbe99b: Pull complete
+5e56973fec2a: Verifying Checksum
+5e56973fec2a: Download complete
+5e56973fec2a: Pull complete
+Digest: sha256:58d2f683e88f507d830a3dfc5a968d5ad57551854cc517ac8671545a273a7c3f
+Status: Downloaded newer image for hyperledger/fabric-peer:3.1.1
+docker.io/hyperledger/fabric-peer:3.1.1
+3.1.1: Pulling from hyperledger/fabric-orderer
+3.1.1: Pulling from hyperledger/fabric-orderer
+0622fac788ed: Already exists
+9cbf4498311b: Pulling fs layer
+d4dedbc9851d: Pulling fs layer
+f8a31f2bb85b: Pulling fs layer
+da6fc8df5def: Pulling fs layer
+67c8404eff0c: Pulling fs layer
+da6fc8df5def: Waiting
+67c8404eff0c: Waiting
+0622fac788ed: Already exists
+9cbf4498311b: Pulling fs layer
+d4dedbc9851d: Pulling fs layer
+f8a31f2bb85b: Pulling fs layer
+da6fc8df5def: Pulling fs layer
+67c8404eff0c: Pulling fs layer
+da6fc8df5def: Waiting
+67c8404eff0c: Waiting
+9cbf4498311b: Download complete
+9cbf4498311b: Pull complete
+f8a31f2bb85b: Verifying Checksum
+f8a31f2bb85b: Download complete
+d4dedbc9851d: Download complete
+9cbf4498311b: Verifying Checksum
+9cbf4498311b: Download complete
+9cbf4498311b: Pull complete
+d4dedbc9851d: Pull complete
+f8a31f2bb85b: Pull complete
+da6fc8df5def: Verifying Checksum
+da6fc8df5def: Download complete
+da6fc8df5def: Pull complete
+d4dedbc9851d: Verifying Checksum
+d4dedbc9851d: Download complete
+d4dedbc9851d: Pull complete
+67c8404eff0c: Download complete
+67c8404eff0c: Pull complete
+Digest: sha256:739db76cec325210208600828c27cac0effee650a785f93d262372802ac6a4ea
+Status: Downloaded newer image for hyperledger/fabric-orderer:3.1.1
+docker.io/hyperledger/fabric-orderer:3.1.1
+da6fc8df5def: Verifying Checksum
+da6fc8df5def: Download complete
+f8a31f2bb85b: Download complete
+f8a31f2bb85b: Pull complete
+da6fc8df5def: Pull complete
+67c8404eff0c: Verifying Checksum
+67c8404eff0c: Download complete
+67c8404eff0c: Pull complete
+Digest: sha256:739db76cec325210208600828c27cac0effee650a785f93d262372802ac6a4ea
+Status: Downloaded newer image for hyperledger/fabric-orderer:3.1.1
+docker.io/hyperledger/fabric-orderer:3.1.1
+3.1.1: Pulling from hyperledger/fabric-ccenv
+3.1.1: Pulling from hyperledger/fabric-ccenv
+0622fac788ed: Already exists
+0ded19432689: Pulling fs layer
+9188c886dfb6: Pulling fs layer
+9708a4705184: Pulling fs layer
+02ee0ae3e781: Pulling fs layer
+c4ff85547d62: Pulling fs layer
+6366f3abc23e: Pulling fs layer
+02ee0ae3e781: Waiting
+c4ff85547d62: Waiting
+6366f3abc23e: Waiting
+0622fac788ed: Already exists
+0ded19432689: Pulling fs layer
+9188c886dfb6: Pulling fs layer
+9708a4705184: Pulling fs layer
+02ee0ae3e781: Pulling fs layer
+c4ff85547d62: Pulling fs layer
+6366f3abc23e: Pulling fs layer
+02ee0ae3e781: Waiting
+c4ff85547d62: Waiting
+6366f3abc23e: Waiting
+9708a4705184: Verifying Checksum
+9708a4705184: Download complete
+9708a4705184: Download complete
+02ee0ae3e781: Verifying Checksum
+02ee0ae3e781: Download complete
+02ee0ae3e781: Download complete
+c4ff85547d62: Verifying Checksum
+c4ff85547d62: Download complete
+6366f3abc23e: Verifying Checksum
+6366f3abc23e: Download complete
+c4ff85547d62: Verifying Checksum
+c4ff85547d62: Download complete
+6366f3abc23e: Verifying Checksum
+6366f3abc23e: Download complete
+9188c886dfb6: Verifying Checksum
+9188c886dfb6: Download complete
+9188c886dfb6: Verifying Checksum
+9188c886dfb6: Download complete
+0ded19432689: Verifying Checksum
+0ded19432689: Download complete
+0ded19432689: Verifying Checksum
+0ded19432689: Download complete
+0ded19432689: Pull complete
+0ded19432689: Pull complete
+9188c886dfb6: Pull complete
+9708a4705184: Pull complete
+02ee0ae3e781: Pull complete
+c4ff85547d62: Pull complete
+6366f3abc23e: Pull complete
+Digest: sha256:60e4bac31e1cae752f9ffc5813c7206a25eaa5033436bd5a59148f5538322ca6
+Status: Downloaded newer image for hyperledger/fabric-ccenv:3.1.1
+docker.io/hyperledger/fabric-ccenv:3.1.1
+9188c886dfb6: Pull complete
+9708a4705184: Pull complete
+02ee0ae3e781: Pull complete
+c4ff85547d62: Pull complete
+6366f3abc23e: Pull complete
+Digest: sha256:60e4bac31e1cae752f9ffc5813c7206a25eaa5033436bd5a59148f5538322ca6
+Status: Downloaded newer image for hyperledger/fabric-ccenv:3.1.1
+docker.io/hyperledger/fabric-ccenv:3.1.1
+[0;34m[INFO] --- Derrubando containers CA (/mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/compose/compose-ca-maquina_2.yaml)... ---[0m
+[0;34m[INFO] --- Derrubando containers de nós (/mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/compose/compose-nodes-maquina_2.yaml)... ---[0m
+[0;34m[INFO] --- Derrubando containers CA (/mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/compose/compose-ca-maquina_1.yaml)... ---[0m
+[0;34m[INFO] --- Derrubando containers de nós (/mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/compose/compose-nodes-maquina_1.yaml)... ---[0m
+[0;32m[SUCESSO] [✓] Limpeza do nó concluída.[0m
+[34m[INFO] --- Alvo: network.yaml ---[0m
+[34m[INFO] === [SLURM] --START --MACHINE MAQUINA_1 --PHASE CLEAN ===[0m
+[34m[INFO] --- Executando clean_node.sh (Modo Verboso) ---[0m
+[32m[SUCESSO] [✓] Concluido clean_node.sh com sucesso.[0m
+[0;32m[SUCESSO] [✓] Limpeza do nó concluída.[0m
+[34m[INFO] --- Alvo: network.yaml ---[0m
+[34m[INFO] === [SLURM] --START --MACHINE MAQUINA_2 --PHASE CLEAN ===[0m
+[34m[INFO] --- Executando clean_node.sh (Modo Verboso) ---[0m
+[32m[SUCESSO] [✓] Concluido clean_node.sh com sucesso.[0m
+[0;34m[INFO] --- Iniciando limpeza da infraestrutura para a rede: FabricNetwork ---[0m
+[0;34m[INFO] --- Derrubando containers CA (/mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/compose/compose-ca-maquina_1.yaml)... ---[0m
+[0;34m[INFO] --- Derrubando containers CA (/mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/compose/compose-ca-maquina_2.yaml)... ---[0m
+[0;34m[INFO] --- Derrubando containers de nós (/mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/compose/compose-nodes-maquina_1.yaml)... ---[0m
+[0;34m[INFO] --- Derrubando containers de nós (/mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/compose/compose-nodes-maquina_2.yaml)... ---[0m
+[0;34m[INFO] --- Limpando containers remanescentes na rede FabricNetwork_net... ---[0m
+[0;34m[INFO] --- Limpando diretório network/ (preservando logs/)... ---[0m
+[0;34m[INFO] --- Corrigindo permissões em: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network ---[0m
+[0;34m[INFO] --- Removendo register_enroll.sh... ---[0m
+[0;32m[SUCESSO] [✓] register_enroll.sh removido.[0m
+[0;34m[INFO] --- Removendo create_artifacts.sh... ---[0m
+[0;32m[SUCESSO] [✓] create_artifacts.sh removido.[0m
+[0;34m[INFO] --- Removendo create_channel.sh... ---[0m
+[0;32m[SUCESSO] [✓] create_channel.sh removido.[0m
+[0;34m[INFO] --- Removendo deploy_chaincode.sh... ---[0m
+[0;32m[SUCESSO] [✓] deploy_chaincode.sh removido.[0m
+[0;32m[SUCESSO] [✓] Limpeza da rede concluída com sucesso![0m
+[34m[INFO] --- Alvo: network.yaml ---[0m
+[34m[INFO] === [SLURM] --SETUP --PHASE CLEAN ===[0m
+[34m[INFO] --- Executando clean_network.sh (Modo Verboso) ---[0m
+[32m[SUCESSO] [✓] Concluido clean_network.sh com sucesso.[0m
+[0;34m[INFO] --- Verificando pré-requisitos... ---[0m
+[0;32m[SUCESSO] [✓] Docker encontrado: Docker version 28.3.2, build 578ccf6[0m
+[1;33m[AVISO] [!] Go não instalado (OK se não for compilar Chaincode em Go)[0m
+[0;32m[SUCESSO] [✓] Binários Fabric (3.1.1) compatíveis.[0m
+[0;32m[SUCESSO] [✓] Fabric-CA (1.5.13) compatível.[0m
+[0;32m[SUCESSO] [✓] --- Check Finalizado ---[0m
+[34m[INFO] --- Alvo: network.yaml ---[0m
+[34m[INFO] === [SLURM] --SETUP --PHASE PREREQS ===[0m
+[34m[INFO] --- Verificando pré-requisitos do sistema ---[0m
+[34m[INFO] --- Executando check_reqs.sh (Modo Verboso) ---[0m
+[32m[SUCESSO] [✓] Concluido check_reqs.sh com sucesso.[0m
+[0;34m[INFO] --- Criando a network FabricNetwork_net ---[0m
+[0;34m[INFO] --- Criando a network FabricNetwork_net ---[0m
+816b20d43075c2c40e93eee8afaee7c85944854dfe130ba73d8a211dca465b26
+[0;34m[INFO] --- Subindo containers... ---[0m
+4d8b8d8d312805af48bcbfd6654f38959da001d49fe77d9715e38fe6322ffc8d
+[0;34m[INFO] --- Subindo containers... ---[0m
+[1;33m[AVISO] [!] Falha ao corrigir permissões automaticamente. Talvez precise de sudo manual.[0m
+[0;32m[SUCESSO] [✓] --- CAs Iniciadas com Sucesso ---[0m
+ca-org1                                              Up 5 seconds    7054/tcp, 0.0.0.0:8054->8054/tcp, [::]:8054->8054/tcp
+ca-org2                                              Up 5 seconds    7054/tcp, 0.0.0.0:9054->9054/tcp, [::]:9054->9054/tcp
+ca-orderer                                           Up 5 seconds    0.0.0.0:7054->7054/tcp, [::]:7054->7054/tcp
+[34m[INFO] --- Alvo: network.yaml ---[0m
+[34m[INFO] === [SLURM] --START --MACHINE MAQUINA_1 --PHASE CAS ===[0m
+[34m[INFO] --- Gerando arquivos docker-compose para ca ---[0m
+[32m[SUCESSO] [✓] Arquivo gerado: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/compose/compose-ca-maquina_1.yaml[0m
+[34m[INFO] --- Iniciando os servidores CA ---[0m
+[34m[INFO] --- Executando start_cas.sh (Modo Verboso) ---[0m
+[32m[SUCESSO] [✓] Concluido start_cas.sh com sucesso.[0m
+[0;32m[SUCESSO] [✓] Permissões corrigidas com sucesso.[0m
+[0;32m[SUCESSO] [✓] --- CAs Iniciadas com Sucesso ---[0m
+ca-org4                                                  Up 9 seconds   7054/tcp, 0.0.0.0:11054->11054/tcp, [::]:11054->11054/tcp
+ca-org3                                                  Up 9 seconds   7054/tcp, 0.0.0.0:10054->10054/tcp, [::]:10054->10054/tcp
+[34m[INFO] --- Alvo: network.yaml ---[0m
+[34m[INFO] === [SLURM] --START --MACHINE MAQUINA_2 --PHASE CAS ===[0m
+[34m[INFO] --- Gerando arquivos docker-compose para ca ---[0m
+[32m[SUCESSO] [✓] Arquivo gerado: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/compose/compose-ca-maquina_2.yaml[0m
+[34m[INFO] --- Iniciando os servidores CA ---[0m
+[34m[INFO] --- Executando start_cas.sh (Modo Verboso) ---[0m
+[32m[SUCESSO] [✓] Concluido start_cas.sh com sucesso.[0m
+[0;34m[INFO] --- --- Iniciando Geração de Identidades --- ---[0m
+[0;34m[INFO] --- Processando Organização: Org1 ---[0m
+[0;34m[INFO] --- Bootstrap Admin CA (Org1 em 10.10.20.151:8054)... ---[0m
+[0;34m[INFO] --- Configurando Peer: peer0 ---[0m
+Password: peer0pw
+[0;34m[INFO] --- [TLS] Gerando certificados para peer0.Org1.exemplo.com ---[0m
+[0;34m[INFO] --- Configurando Peer: peer1 ---[0m
+Password: peer1pw
+[0;34m[INFO] --- [TLS] Gerando certificados para peer1.Org1.exemplo.com ---[0m
+[0;34m[INFO] --- Configurando Admin da Org: Org1admin ---[0m
+Password: Org1adminpw
+[0;34m[INFO] --- Finalizando MSP da Organização em /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/organizations/peerOrganizations/Org1.exemplo.com/msp ---[0m
+[0;34m[INFO] --- Processando Organização: Org2 ---[0m
+[0;34m[INFO] --- Bootstrap Admin CA (Org2 em 10.10.20.151:9054)... ---[0m
+[0;34m[INFO] --- Configurando Peer: peer0 ---[0m
+Password: peer0pw
+[0;34m[INFO] --- [TLS] Gerando certificados para peer0.Org2.exemplo.com ---[0m
+[0;34m[INFO] --- Configurando Peer: peer1 ---[0m
+Password: peer1pw
+[0;34m[INFO] --- [TLS] Gerando certificados para peer1.Org2.exemplo.com ---[0m
+[0;34m[INFO] --- Configurando Admin da Org: Org2admin ---[0m
+Password: Org2adminpw
+[0;34m[INFO] --- Finalizando MSP da Organização em /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/organizations/peerOrganizations/Org2.exemplo.com/msp ---[0m
+[0;34m[INFO] --- Processando Organização: Org3 ---[0m
+[0;34m[INFO] --- Bootstrap Admin CA (Org3 em 10.10.20.152:10054)... ---[0m
+[0;34m[INFO] --- Configurando Peer: peer0 ---[0m
+Password: peer0pw
+[0;34m[INFO] --- [TLS] Gerando certificados para peer0.Org3.exemplo.com ---[0m
+[0;34m[INFO] --- Configurando Peer: peer1 ---[0m
+Password: peer1pw
+[0;34m[INFO] --- [TLS] Gerando certificados para peer1.Org3.exemplo.com ---[0m
+[0;34m[INFO] --- Configurando Admin da Org: Org3admin ---[0m
+Password: Org3adminpw
+[0;34m[INFO] --- Finalizando MSP da Organização em /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/organizations/peerOrganizations/Org3.exemplo.com/msp ---[0m
+[0;34m[INFO] --- Processando Organização: Org4 ---[0m
+[0;34m[INFO] --- Bootstrap Admin CA (Org4 em 10.10.20.152:11054)... ---[0m
+[0;34m[INFO] --- Configurando Peer: peer0 ---[0m
+Password: peer0pw
+[0;34m[INFO] --- [TLS] Gerando certificados para peer0.Org4.exemplo.com ---[0m
+[0;34m[INFO] --- Configurando Peer: peer1 ---[0m
+Password: peer1pw
+[0;34m[INFO] --- [TLS] Gerando certificados para peer1.Org4.exemplo.com ---[0m
+[0;34m[INFO] --- Configurando Admin da Org: Org4admin ---[0m
+Password: Org4adminpw
+[0;34m[INFO] --- Finalizando MSP da Organização em /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/organizations/peerOrganizations/Org4.exemplo.com/msp ---[0m
+[0;34m[INFO] --- Processando Orderer Org (CA: ca-orderer em 10.10.20.151:7054) ---[0m
+[0;34m[INFO] --- Bootstrap Admin CA Orderer (10.10.20.151:7054)... ---[0m
+[0;34m[INFO] --- Configurando Orderer Node: orderer0 ---[0m
+Password: orderer0pw
+[0;34m[INFO] --- [TLS] Gerando certificados para orderer0.exemplo.com ---[0m
+[0;34m[INFO] --- Configurando Orderer Node: orderer1 ---[0m
+Password: orderer1pw
+[0;34m[INFO] --- [TLS] Gerando certificados para orderer1.exemplo.com ---[0m
+[0;34m[INFO] --- Configurando Orderer Node: orderer2 ---[0m
+Password: orderer2pw
+[0;34m[INFO] --- [TLS] Gerando certificados para orderer2.exemplo.com ---[0m
+[0;34m[INFO] --- Configurando Orderer Node: orderer3 ---[0m
+Password: orderer3pw
+[0;34m[INFO] --- [TLS] Gerando certificados para orderer3.exemplo.com ---[0m
+[0;34m[INFO] --- Configurando Admin da Org: ordererAdmin ---[0m
+Password: ordererAdminpw
+[0;34m[INFO] --- Finalizando MSP da Organização em /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/organizations/ordererOrganizations/exemplo.com/msp ---[0m
+[0;32m[SUCESSO] [✓] Todas as identidades foram geradas com sucesso![0m
+[0;34m[INFO] --- Corrigindo permissões da pasta organizations... ---[0m
+[0;34m[INFO] --- Corrigindo permissões em: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/organizations ---[0m
+[34m[INFO] --- Alvo: network.yaml ---[0m
+[34m[INFO] === [SLURM] --SETUP --PHASE ENROLL ===[0m
+[34m[INFO] --- Registrando e matriculando identidades ---[0m
+[34m[INFO] > Gerando script de identidades (register_enroll.sh)...[0m
+[32m[SUCESSO] [✓] Script gerado: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/scripts/register_enroll.sh[0m
+[34m[INFO] --- Executando register_enroll.sh (Modo Verboso) ---[0m
+[32m[SUCESSO] [✓] Concluido register_enroll.sh com sucesso.[0m
+[0;34m[INFO] --- --- Gerando Blocos de Configuração (Fabric v3) --- ---[0m
+[0;34m[INFO] --- Gerando Genesis Block (channel-all)... ---[0m
+[0;34m[INFO] --- Gerando Block: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/channel-artifacts/channel12.block ---[0m
+[0;32m[SUCESSO] [✓] Artefatos criados com sucesso![0m
+[34m[INFO] --- Alvo: network.yaml ---[0m
+[34m[INFO] === [SLURM] --SETUP --PHASE ARTIFACTS ===[0m
+[34m[INFO] --- Exportando contexto ativo da rede ---[0m
+[34m[INFO] --- Gerando artefatos da rede (configtx.yaml, blocos, canais, etc) ---[0m
+[32m[SUCESSO] [✓] Arquivo configtx.yaml gerado em: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/configtx.yaml[0m
+[32m[SUCESSO] [✓] Script gerado: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/scripts/create_artifacts.sh[0m
+[34m[INFO] --- Executando create_artifacts.sh (Modo Verboso) ---[0m
+[32m[SUCESSO] [✓] Concluido create_artifacts.sh com sucesso.[0m
+[0;34m[INFO] --- Subindo Orderers e Peers... ---[0m
+[0;34m[INFO] --- Subindo Orderers e Peers... ---[0m
+[0;32m[SUCESSO] [✓] Nós da rede iniciados com sucesso.[0m
+[34m[INFO] --- Alvo: network.yaml ---[0m
+[34m[INFO] === [SLURM] --START --MACHINE MAQUINA_1 --PHASE NODES ===[0m
+[34m[INFO] --- Gerando arquivos docker-compose para peers e orderers ---[0m
+[32m[SUCESSO] [✓] Arquivo de nós gerado: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/compose/compose-nodes-maquina_1.yaml[0m
+[34m[INFO] --- Executando start_nodes.sh (Modo Verboso) ---[0m
+[32m[SUCESSO] [✓] Concluido start_nodes.sh com sucesso.[0m
+[0;32m[SUCESSO] [✓] Nós da rede iniciados com sucesso.[0m
+[34m[INFO] --- Alvo: network.yaml ---[0m
+[34m[INFO] === [SLURM] --START --MACHINE MAQUINA_2 --PHASE NODES ===[0m
+[34m[INFO] --- Gerando arquivos docker-compose para peers e orderers ---[0m
+[32m[SUCESSO] [✓] Arquivo de nós gerado: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/network/compose/compose-nodes-maquina_2.yaml[0m
+[34m[INFO] --- Executando start_nodes.sh (Modo Verboso) ---[0m
+[32m[SUCESSO] [✓] Concluido start_nodes.sh com sucesso.[0m
+[0;34m[INFO] === INICIANDO CONFIGURAçãO DE CANAIS (FABRIC V3) ===[0m
+[0;34m[INFO] --- >> Configurando Canal: channel-all << ---[0m
+Status: 201
+{
+	"name": "channel-all",
+	"url": "/participation/v1/channels/channel-all",
+	"consensusRelation": "consenter",
+	"status": "active",
+	"height": 1
+}
+
+Status: 201
+{
+	"name": "channel-all",
+	"url": "/participation/v1/channels/channel-all",
+	"consensusRelation": "consenter",
+	"status": "active",
+	"height": 1
+}
+
+Status: 201
+{
+	"name": "channel-all",
+	"url": "/participation/v1/channels/channel-all",
+	"consensusRelation": "consenter",
+	"status": "active",
+	"height": 1
+}
+
+Status: 201
+{
+	"name": "channel-all",
+	"url": "/participation/v1/channels/channel-all",
+	"consensusRelation": "consenter",
+	"status": "active",
+	"height": 1
+}
+
+[0;34m[INFO] --- Definindo Anchor Peer para Org1 no canal channel-all... ---[0m
+[0;32m[SUCESSO] [✓] Anchor Peer para Org1 atualizado![0m
+[0;34m[INFO] --- Definindo Anchor Peer para Org2 no canal channel-all... ---[0m
+[0;32m[SUCESSO] [✓] Anchor Peer para Org2 atualizado![0m
+[0;34m[INFO] --- Definindo Anchor Peer para Org3 no canal channel-all... ---[0m
+[0;32m[SUCESSO] [✓] Anchor Peer para Org3 atualizado![0m
+[0;34m[INFO] --- Definindo Anchor Peer para Org4 no canal channel-all... ---[0m
+[0;32m[SUCESSO] [✓] Anchor Peer para Org4 atualizado![0m
+[0;34m[INFO] --- >> Configurando Canal: channel12 << ---[0m
+Status: 201
+{
+	"name": "channel12",
+	"url": "/participation/v1/channels/channel12",
+	"consensusRelation": "consenter",
+	"status": "active",
+	"height": 1
+}
+
+Status: 201
+{
+	"name": "channel12",
+	"url": "/participation/v1/channels/channel12",
+	"consensusRelation": "consenter",
+	"status": "active",
+	"height": 1
+}
+
+Status: 201
+{
+	"name": "channel12",
+	"url": "/participation/v1/channels/channel12",
+	"consensusRelation": "consenter",
+	"status": "active",
+	"height": 1
+}
+
+Status: 201
+{
+	"name": "channel12",
+	"url": "/participation/v1/channels/channel12",
+	"consensusRelation": "consenter",
+	"status": "active",
+	"height": 1
+}
+
+[0;34m[INFO] --- Definindo Anchor Peer para Org1 no canal channel12... ---[0m
+[0;32m[SUCESSO] [✓] Anchor Peer para Org1 atualizado![0m
+[0;34m[INFO] --- Definindo Anchor Peer para Org2 no canal channel12... ---[0m
+[0;32m[SUCESSO] [✓] Anchor Peer para Org2 atualizado![0m
+[34m[INFO] --- Alvo: network.yaml ---[0m
+[34m[INFO] === [SLURM] --SETUP --PHASE CHANNELS ===[0m
+[34m[INFO] --- Configurando canais e fazendo peers entrarem neles ---[0m
+[34m[INFO] --- Executando create_channel.sh (Modo Verboso) ---[0m
+[32m[SUCESSO] [✓] Concluido create_channel.sh com sucesso.[0m
+[0;34m[INFO] --- --- Iniciando Deploy de Chaincode --- ---[0m
+[0;34m[INFO] --- === Chaincode: basic_asset === ---[0m
+[0;34m[INFO] --- Instalando em peer0.Org1.exemplo.com (10.10.20.151:7051)... ---[0m
+[0;34m[INFO] --- Instalando em peer1.Org1.exemplo.com (10.10.20.151:8051)... ---[0m
+[0;34m[INFO] --- Instalando em peer0.Org2.exemplo.com (10.10.20.151:9051)... ---[0m
+[0;34m[INFO] --- Instalando em peer1.Org2.exemplo.com (10.10.20.151:10051)... ---[0m
+[0;34m[INFO] --- Instalando em peer0.Org3.exemplo.com (10.10.20.152:11051)... ---[0m
+[0;34m[INFO] --- Instalando em peer1.Org3.exemplo.com (10.10.20.152:12051)... ---[0m
+[0;34m[INFO] --- Instalando em peer0.Org4.exemplo.com (10.10.20.152:13051)... ---[0m
+[0;34m[INFO] --- Instalando em peer1.Org4.exemplo.com (10.10.20.152:14051)... ---[0m
+[0;34m[INFO] --- Package ID: basic_asset_1.0:25404d3b35f68e79b1157f81c2367daba675d4d9597e952bd9e45a7f86b11c39 ---[0m
+[0;34m[INFO] --- Aprovando para Org1 (peer: 10.10.20.151:7051)... ---[0m
+[0;34m[INFO] --- Aprovando para Org2 (peer: 10.10.20.151:9051)... ---[0m
+[0;34m[INFO] --- Aprovando para Org3 (peer: 10.10.20.152:11051)... ---[0m
+[0;34m[INFO] --- Aprovando para Org4 (peer: 10.10.20.152:13051)... ---[0m
+[0;34m[INFO] --- Commitando chaincode basic_asset no canal channel-all... ---[0m
+[0;32m[SUCESSO] [✓] Deploy do chaincode basic_asset concluído com sucesso![0m
+[0;34m[INFO] --- === Chaincode: calc_do === ---[0m
+[0;34m[INFO] --- Instalando em peer0.Org1.exemplo.com (10.10.20.151:7051)... ---[0m
+[0;34m[INFO] --- Instalando em peer1.Org1.exemplo.com (10.10.20.151:8051)... ---[0m
+[0;34m[INFO] --- Instalando em peer0.Org2.exemplo.com (10.10.20.151:9051)... ---[0m
+[0;34m[INFO] --- Instalando em peer1.Org2.exemplo.com (10.10.20.151:10051)... ---[0m
+[0;34m[INFO] --- Instalando em peer0.Org3.exemplo.com (10.10.20.152:11051)... ---[0m
+[0;34m[INFO] --- Instalando em peer1.Org3.exemplo.com (10.10.20.152:12051)... ---[0m
+[0;34m[INFO] --- Instalando em peer0.Org4.exemplo.com (10.10.20.152:13051)... ---[0m
+[0;34m[INFO] --- Instalando em peer1.Org4.exemplo.com (10.10.20.152:14051)... ---[0m
+[0;34m[INFO] --- Package ID: calc_do_1.0:52d4e858f1c31f04ae80e11cc7602d29376d4e2cce13b9355feafdb3c143958c ---[0m
+[0;34m[INFO] --- Aprovando para Org1 (peer: 10.10.20.151:7051)... ---[0m
+[0;34m[INFO] --- Aprovando para Org2 (peer: 10.10.20.151:9051)... ---[0m
+[0;34m[INFO] --- Aprovando para Org3 (peer: 10.10.20.152:11051)... ---[0m
+[0;34m[INFO] --- Aprovando para Org4 (peer: 10.10.20.152:13051)... ---[0m
+[0;34m[INFO] --- Commitando chaincode calc_do no canal channel-all... ---[0m
+[0;32m[SUCESSO] [✓] Deploy do chaincode calc_do concluído com sucesso![0m
+[34m[INFO] --- Alvo: network.yaml ---[0m
+[34m[INFO] === [SLURM] --SETUP --PHASE CHAINCODE ===[0m
+[34m[INFO] --- Fazendo deploy de chaincodes ---[0m
+[34m[INFO] --- Compilando chaincode basic_asset localmente para Linux... ---[0m
+[32m[SUCESSO] [✓] Pacote CCAAS gerado em: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/chaincode/basic_asset.tar.gz[0m
+[34m[INFO] --- Compilando chaincode calc_do localmente para Linux... ---[0m
+[32m[SUCESSO] [✓] Pacote CCAAS gerado em: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/chaincode/calc_do.tar.gz[0m
+[34m[INFO] --- Executando deploy_chaincode.sh (Modo Verboso) ---[0m
+[32m[SUCESSO] [✓] Concluido deploy_chaincode.sh com sucesso.[0m
+[0;34m[INFO] --- --- Iniciando containers CCAAS locais --- ---[0m
+[0;34m[INFO] --- Iniciando chaincode basic_asset (porta 9999)... ---[0m
+[0;34m[INFO] --- Package ID: basic_asset_1.0:25404d3b35f68e79b1157f81c2367daba675d4d9597e952bd9e45a7f86b11c39 ---[0m
+[0;34m[INFO] --- Corrigindo permissões em: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/chaincode/basic_asset ---[0m
+6c1436097d961e49e6740928954ef7a4226eca852678f79720258753fa83e313
+[0;32m[SUCESSO] [✓] Chaincode basic_asset iniciado na porta 9999.[0m
+[0;34m[INFO] --- Iniciando chaincode calc_do (porta 10000)... ---[0m
+[0;34m[INFO] --- Package ID: calc_do_1.0:52d4e858f1c31f04ae80e11cc7602d29376d4e2cce13b9355feafdb3c143958c ---[0m
+[0;34m[INFO] --- Corrigindo permissões em: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/chaincode/calc_do ---[0m
+2715438ef1590941075f9aae05f014183fcc2acd7e98b80e4ec3dc005718d0f2
+[0;32m[SUCESSO] [✓] Chaincode calc_do iniciado na porta 10000.[0m
+[34m[INFO] --- Alvo: network.yaml ---[0m
+[34m[INFO] === [SLURM] --START --MACHINE MAQUINA_1 --PHASE CCAAS ===[0m
+[34m[INFO] --- Iniciando containers CCAAS de 'maquina_1' ---[0m
+[32m[SUCESSO] [✓] Script gerado: /mnt/prj/g11718038933/new_HERMESSC/IC_Create_Network/scripts/start_chaincodes.sh[0m
+[34m[INFO] --- Executando start_chaincodes.sh (Modo Verboso) ---[0m
+[32m[SUCESSO] [✓] Concluido start_chaincodes.sh com sucesso.[0m

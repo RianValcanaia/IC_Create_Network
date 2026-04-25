@@ -286,6 +286,7 @@ def _setup_phase(controller, config, paths, phase):
     elif phase == 'enroll':
         _register_enroll(controller, config, paths, distributed=True)
     elif phase == 'artifacts':
+        _exporta_network_contexto(config, paths)
         _cria_artefatos(controller, config, paths)
     elif phase == 'channels':
         _configura_canais(controller, config, paths, distributed=True)

@@ -17,23 +17,23 @@ slurm:
 # o comportamento é o mesmo de `--up` sem `--machine` (tudo local).
 machines:
   maquina_1:
-    ip: "192.168.1.10"   # IP real da máquina na LAN — ajuste conforme seu cluster
-    slurm_node: "node01" # nome do nó no SLURM (sbatch --nodelist)
+    ip: "10.10.20.151"
+    slurm_node: "baia1" # nome do nó no SLURM (sbatch --nodelist)
     coordinator: true    # este nó executa enrollment, canais e lifecycle do chaincode
   maquina_2:
-    ip: "192.168.1.11"
-    slurm_node: "node02"
-  maquina_3:
-    ip: "192.168.1.12"
-    slurm_node: "node03"
-  maquina_4:
-    ip: "192.168.1.13"
-    slurm_node: "node04"
+    ip: "10.10.20.152"
+    slurm_node: "baia2"
+#  maquina_2:
+#    ip: "10.10.20.154"
+#    slurm_node: "baia4"
+#  maquina_2:
+#    ip: "10.10.20.155"
+#    slurm_node: "baia5"
 # Distribuição: 1 orderer + 1 org (CA + 2 peers) por máquina
 # maquina_1 → orderer0 + ca-orderer + Org1  (coordinator)
 # maquina_2 → orderer1 + Org2
-# maquina_3 → orderer2 + Org3
-# maquina_4 → orderer3 + Org4
+# maquina_2 → orderer2 + Org3
+# maquina_2 → orderer3 + Org4
 
 # Configuração Global do Orderer
 orderer:
@@ -55,19 +55,19 @@ orderer:
       host: "orderer1.exemplo.com"
       port: 7062
       admin_port: 7063
-      machine: "maquina_2"
+      machine: "maquina_1"
 
     - name: "orderer2"
       host: "orderer2.exemplo.com"
       port: 7064
       admin_port: 7065
-      machine: "maquina_3"
+      machine: "maquina_2"
 
     - name: "orderer3"
       host: "orderer3.exemplo.com"
       port: 7066
       admin_port: 7067
-      machine: "maquina_4"
+      machine: "maquina_2"
   ca:
     name: "ca-orderer"
     host: "ca.orderer.exemplo.com" # Host virtual para o docker
@@ -101,18 +101,18 @@ organizations:
       name: "ca-org2"
       host: "ca.org2.exemplo.com"
       port: 9054
-      machine: "maquina_2"
+      machine: "maquina_1"
     peers:
       - name: "peer0"
         host: "peer0.org2.exemplo.com"
         port: 9051
         chaincode_port: 9052
-        machine: "maquina_2"
+        machine: "maquina_1"
       - name: "peer1"
         host: "peer1.org2.exemplo.com"
         port: 10051
         chaincode_port: 10052
-        machine: "maquina_2"
+        machine: "maquina_1"
 
   - name: "Org3"
     msp_id: "Org3MSP"
@@ -120,18 +120,18 @@ organizations:
       name: "ca-org3"
       host: "ca.org3.exemplo.com"
       port: 10054
-      machine: "maquina_3"
+      machine: "maquina_2"
     peers:
       - name: "peer0"
         host: "peer0.org3.exemplo.com"
         port: 11051
         chaincode_port: 11052
-        machine: "maquina_3"
+        machine: "maquina_2"
       - name: "peer1"
         host: "peer1.org3.exemplo.com"
         port: 12051
         chaincode_port: 12052
-        machine: "maquina_3"
+        machine: "maquina_2"
 
   - name: "Org4"
     msp_id: "Org4MSP"
@@ -139,18 +139,18 @@ organizations:
       name: "ca-org4"
       host: "ca.org4.exemplo.com"
       port: 11054
-      machine: "maquina_4"
+      machine: "maquina_2"
     peers:
       - name: "peer0"
         host: "peer0.org4.exemplo.com"
         port: 13051
         chaincode_port: 13052
-        machine: "maquina_4"
+        machine: "maquina_2"
       - name: "peer1"
         host: "peer1.org4.exemplo.com"
         port: 14051
         chaincode_port: 14052
-        machine: "maquina_4"
+        machine: "maquina_2"
 
 # Definições de canais
 channels:

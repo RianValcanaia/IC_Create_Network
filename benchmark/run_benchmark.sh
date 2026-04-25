@@ -19,7 +19,8 @@ COOLDOWN_MIN=60        # cooldown mínimo obrigatório após cada run (segundos)
 DRAIN_POLL=10          # intervalo entre polls do Prometheus (segundos)
 DRAIN_STABLE=3         # quantas leituras consecutivas com TPS≈0 para considerar drenado
 DRAIN_TIMEOUT=600      # desiste de esperar após este tempo (segundos) e continua assim mesmo
-PROMETHEUS_URL="http://localhost:9090"
+HERMES_URL="http://10.10.20.152:3000"
+PROMETHEUS_URL="http://10.10.20.154:9090"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RESULTS_DIR="$SCRIPT_DIR/resultados"
 
@@ -39,16 +40,18 @@ error()   { echo -e "${RED}[ERRO]${NC} $1"; }
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║     Benchmark Hermes + Hyperledger Fabric 3.0                ║"
-echo "║     $RUNS execuções × ~41 min = ~$((RUNS * 41 + (RUNS-1) * 2)) min totais estimados          ║"
+echo "║     $RUNS execuções × ~95 min = ~$((RUNS * 95 + (RUNS-1) * 2)) min totais estimados          ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 
 info "Verificando pré-condições..."
 
-# Hermes respondendo
-if ! curl -sf http://localhost:3000/api/calcular-do \
-    -X POST -F "input=@$SCRIPT_DIR/fixture_do.json" > /dev/null 2>&1; then
-    error "Hermes não está respondendo em localhost:3000"
+# Hermes respondendo — captura HTTP status para mensagem de erro precisa
+HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+    -X POST -F "input=@$SCRIPT_DIR/fixture_do.json" \
+    "$HERMES_URL/api/calcular-do" 2>/dev/null || echo "000")
+if [ "$HTTP_STATUS" != "200" ]; then
+    error "Hermes não está respondendo em $HERMES_URL (HTTP $HTTP_STATUS)"
     error "Inicie com: cd ~/HERMESSC/projects/hermes-api-server && npm run watch"
     exit 1
 fi
@@ -58,7 +61,7 @@ success "Hermes respondendo"
 TARGETS_UP=$(curl -s 'http://localhost:9090/api/v1/targets' 2>/dev/null | \
     python3 -c "import sys,json; d=json.load(sys.stdin); print(sum(1 for t in d['data']['activeTargets'] if t['health']=='up'))" 2>/dev/null || echo "0")
 if [ "$TARGETS_UP" -lt 12 ]; then
-    warn "Prometheus: apenas $TARGETS_UP/12 targets UP — métricas M4/M6 podem estar incompletas"
+    warn "Prometheus: apenas $TARGETS_UP/12 targets UP — métricas M4 podem estar incompletas"
 else
     success "Prometheus: $TARGETS_UP/12 targets UP"
 fi
@@ -74,7 +77,7 @@ echo ""
 # ── Health check: aguarda Fabric drenar transações pendentes ──────────────────
 #
 # Consulta o Prometheus para verificar se a taxa de endorsements caiu a zero,
-# indicando que o sistema processou todas as transações submetidas pelo C4.
+# indicando que o sistema processou todas as transações submetidas pelo cenário anterior.
 #
 # Métricas tentadas em ordem de preferência:
 #   1. endorser_proposals_received  (peers — mais direta)
@@ -184,40 +187,9 @@ except:
 
 # ── Instrumentação por run ─────────────────────────────────────────────────────
 #
-# query_m6_snapshot   OUT_FILE        — snapshot de contadores MVCC/VALID/INVALID
 # save_run_metadata   N DIR START END — metadata.json com timestamps por cenário
-# save_m6_delta       N DIR           — delta M6 (before vs after) → m6_delta.json
 # extract_prometheus  N DIR           — range queries Prometheus para janela do run
 # verify_baseline_clean LABEL         — aguarda altura blockchain estabilizar
-
-query_m6_snapshot() {
-    local out_file="$1"
-    python3 << PYEOF 2>/dev/null
-import json, urllib.request, urllib.parse
-
-prom_url = "$PROMETHEUS_URL"
-out_file = "$out_file"
-
-metrics = {
-    "mvcc":    'sum(ledger_transaction_count{validation_code="MVCC_READ_CONFLICT"})',
-    "invalid": 'sum(ledger_transaction_count{validation_code="INVALID"})',
-    "valid":   'sum(ledger_transaction_count{validation_code="VALID"})',
-}
-result = {}
-for name, query in metrics.items():
-    try:
-        url = prom_url + "/api/v1/query?query=" + urllib.parse.quote(query)
-        with urllib.request.urlopen(url, timeout=5) as resp:
-            data = json.loads(resp.read())
-        r = data.get("data", {}).get("result", [])
-        result[name] = float(r[0]["value"][1]) if r else 0.0
-    except Exception:
-        result[name] = None
-
-with open(out_file, "w") as f:
-    json.dump(result, f)
-PYEOF
-}
 
 # Salva metadata.json com timestamps precisos do run e de cada cenário.
 # Offsets devem bater com os startTime definidos em test_hermes.js.
@@ -240,6 +212,7 @@ SCENARIOS = [
     ("C2_leve",     600,  600),
     ("C3_moderada", 1500, 600),
     ("C4_alta",     2520, 600),
+    ("C5_maxima",   4200, 600),
 ]
 
 t0 = datetime.fromisoformat(start.replace("Z", "+00:00"))
@@ -258,43 +231,6 @@ with open("$run_dir/metadata.json", "w") as f:
 PYEOF
 }
 
-save_m6_delta() {
-    local run_num="$1"
-    local run_dir="$2"
-    local before_file="$run_dir/.m6_before.json"
-    local after_file="$run_dir/.m6_after.json"
-
-    query_m6_snapshot "$after_file" || { warn "Falha ao capturar snapshot M6 final"; return 1; }
-
-    python3 << PYEOF 2>/dev/null
-import json, sys
-
-run = $run_num
-try:
-    with open("$before_file") as f:
-        before = json.load(f)
-    with open("$after_file") as f:
-        after = json.load(f)
-except Exception as e:
-    print(f"[WARN] Erro ao ler snapshots M6: {e}")
-    sys.exit(1)
-
-delta = {"run": run}
-for k in ("mvcc", "valid", "invalid"):
-    b = before.get(k)
-    a = after.get(k)
-    if b is not None and a is not None:
-        delta[f"{k}_delta"]  = int(max(0, a - b))
-        delta[f"{k}_before"] = int(b)
-        delta[f"{k}_after"]  = int(a)
-    else:
-        delta[f"{k}_delta"] = None
-
-with open("$run_dir/m6_delta.json", "w") as f:
-    json.dump(delta, f, indent=2)
-PYEOF
-}
-
 extract_prometheus_for_run() {
     local run_num="$1"
     local run_dir="$2"
@@ -306,19 +242,21 @@ extract_prometheus_for_run() {
     fi
 
     info "[Run $run_num] Extraindo métricas Prometheus (dados frescos)..."
-    if python3 << PYEOF 2>/dev/null
-import sys
-sys.path.insert(0, "$SCRIPT_DIR")
-import json
+    if _BENCH_SCRIPT_DIR="$SCRIPT_DIR" _BENCH_RUN_DIR="$run_dir" \
+       python3 - << 'PYEOF' 2>/dev/null
+import sys, os, json
+
+sys.path.insert(0, os.environ['_BENCH_SCRIPT_DIR'])
+run_dir = os.environ['_BENCH_RUN_DIR']
 
 try:
     from analise_resultados import extrair_metricas_prometheus
-    with open("$meta_file") as f:
+    with open(os.path.join(run_dir, 'metadata.json')) as f:
         meta = json.load(f)
     extrair_metricas_prometheus(
         [{"run": meta["run"], "start": meta["start"], "end": meta["end"]}],
         step="15s",
-        output_dir="$run_dir",
+        output_dir=run_dir,
     )
 except ImportError:
     sys.exit(1)
@@ -333,8 +271,6 @@ PYEOF
 }
 
 # Aguarda a altura da blockchain estabilizar antes de iniciar o run.
-# Usa deriv(ledger_blockchain_height) para detectar se o orderer ainda está
-# commitando blocos remanescentes do run anterior.
 verify_baseline_clean() {
     local run_label="$1"
     local max_wait=120
@@ -402,7 +338,6 @@ for i in $(seq 1 $RUNS); do
 
     TIMESTAMP=$(date +%Y%m%d_%H%M%S)
     OUTPUT_FILE="$RUN_DIR/k6_run${i}_${TIMESTAMP}.json"
-    SUMMARY_FILE="$RUN_DIR/summary_run${i}_${TIMESTAMP}.json"
 
     echo "────────────────────────────────────────────────────────────────"
     info "Execução $i/$RUNS — $(date '+%d/%m/%Y %H:%M:%S')"
@@ -412,19 +347,14 @@ for i in $(seq 1 $RUNS); do
     # Verificar que blockchain está estável antes de iniciar
     verify_baseline_clean "Run $i"
 
-    # Snapshot M6 antes do run (base para calcular delta ao final)
-    query_m6_snapshot "$RUN_DIR/.m6_before.json" \
-        && info "Snapshot M6 inicial capturado" \
-        || warn "Falha ao capturar snapshot M6 inicial (m6_delta indisponível)"
-
     # Marcar início exato do run
     RUN_START_TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
     # Executar k6
     if k6 run \
         --out "json=$OUTPUT_FILE" \
-        --summary-export "$SUMMARY_FILE" \
         --env "RUN_NUMBER=$i" \
+        --env "BASE_URL=$HERMES_URL" \
         "$SCRIPT_DIR/test_hermes.js"; then
         success "Execução $i concluída com sucesso"
         SUCCESSFUL_RUNS+=($i)
@@ -441,11 +371,6 @@ for i in $(seq 1 $RUNS); do
     save_run_metadata "$i" "$RUN_DIR" "$RUN_START_TS" "$RUN_END_TS" \
         && success "metadata.json salvo → $RUN_DIR/metadata.json" \
         || warn "Falha ao salvar metadata.json"
-
-    # Salvar m6_delta.json com conflitos MVCC ocorridos nesta run
-    save_m6_delta "$i" "$RUN_DIR" \
-        && success "m6_delta.json salvo → $RUN_DIR/m6_delta.json" \
-        || warn "Falha ao salvar m6_delta.json"
 
     # Extrair range queries do Prometheus enquanto os dados estão frescos
     extract_prometheus_for_run "$i" "$RUN_DIR"
