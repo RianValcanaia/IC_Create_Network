@@ -22,7 +22,14 @@ for NODE_COMPOSE in "$PROJECT_ROOT"/network/compose/compose-nodes*.yaml; do
     docker-compose -f "$NODE_COMPOSE" -p "${NETWORK_BASE}_net" down --volumes --remove-orphans || true
 done
 
-# forçar parada de qualquer container órfão na rede 
+# Purga volumes nomeados do projeto por PADRÃO — robusto a compose ausente/renomeado.
+# Evita o 405 "channel already exists" no redeploy: o estado de canal do orderer vive
+# num volume nomeado (${NETWORK_BASE}_net_ordererN.dominio) que o `down` só remove se
+# o compose que o declarou ainda existir na hora do clean.
+infoln "Removendo volumes nomeados do projeto (${NETWORK_BASE}_net_* / _ca_*)..."
+docker volume ls -q | grep -E "^${NETWORK_BASE}_(net|ca)_" | xargs -r docker volume rm -f 2>/dev/null || true
+
+# forçar parada de qualquer container órfão na rede
 infoln "Limpando containers remanescentes na rede $NETWORK_NAME..."
 docker ps -a --filter network="$NETWORK_NAME" -q | xargs -r docker rm -f 
 

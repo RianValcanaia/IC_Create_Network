@@ -26,6 +26,12 @@ else
     warnln "compose-nodes não encontrado para este nó. Pulando."
 fi
 
+# ── Purga volumes nomeados do projeto por PADRÃO (robusto a compose ausente) ───
+# Evita o 405 "channel already exists" no redeploy: o estado de canal do orderer
+# vive num volume nomeado que o `down` só remove com o compose original presente.
+infoln "Removendo volumes nomeados do projeto (${NETWORK_BASE}_net_* / _ca_*)..."
+docker volume ls -q | grep -E "^${NETWORK_BASE}_(net|ca)_" | xargs -r docker volume rm -f 2>/dev/null || true
+
 # ── Remove containers CCAAS órfãos ────────────────────────────────────────────
 docker ps -a --format '{{.Names}}' | grep -E "\.channel" | xargs -I {} docker rm -f {} 2>/dev/null || true
 

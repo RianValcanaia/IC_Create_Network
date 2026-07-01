@@ -41,33 +41,29 @@ remove_if_exists "$SCRIPTS_DIR/deploy_chaincode.sh"
 
 infoln "Removendo arquivos docker-compose gerados..."
 
-# docker compose down
-CA_COMPOSE="$PROJECT_ROOT/network/compose/compose-ca.yaml"
-if [ -f "$CA_COMPOSE" ]; then
-    infoln "Encontrado compose-ca.yaml. Derrubando containers..."
-    docker-compose -f "$CA_COMPOSE" -p "$PROJECT_CA" down --volumes --remove-orphans
-    if [ $? -eq 0 ]; then
-        successln "Containers e volumes removidos com sucesso."
-    else
-        errorln "Falha ao executar docker-compose down. Pode haver resíduos."
-    fi
-else
-    warnln "Arquivo $CA_COMPOSE não encontrado. Pulando etapa de shutdown do Docker."
-fi
+# docker compose down — glob cobre modo local (compose-ca.yaml) E distribuído
+# (compose-ca-maquina_*.yaml). Sem o glob, no deploy SLURM os nomes não batem e o
+# down é pulado, deixando containers/volumes órfãos.
+for CA_COMPOSE in "$PROJECT_ROOT"/network/compose/compose-ca*.yaml; do
+    [ -f "$CA_COMPOSE" ] || continue
+    infoln "Derrubando containers CA ($CA_COMPOSE)..."
+    docker-compose -f "$CA_COMPOSE" -p "$PROJECT_CA" down --volumes --remove-orphans \
+        || errorln "Falha ao derrubar $CA_COMPOSE. Pode haver resíduos."
+done
 
-# docker compose down
-NODE_COMPOSE="$PROJECT_ROOT/network/compose/compose-nodes.yaml"
-if [ -f "$NODE_COMPOSE" ]; then
-    infoln "Encontrado compose-nodes.yaml. Derrubando containers..."
-    docker-compose -f "$NODE_COMPOSE" -p "$PROJECT_NET" down --volumes --remove-orphans
-    if [ $? -eq 0 ]; then
-        successln "Containers e volumes removidos com sucesso."
-    else
-        errorln "Falha ao executar docker-compose down. Pode haver resíduos."
-    fi
-else
-    warnln "Arquivo $NODE_COMPOSE não encontrado. Pulando etapa de shutdown do Docker."
-fi
+for NODE_COMPOSE in "$PROJECT_ROOT"/network/compose/compose-nodes*.yaml; do
+    [ -f "$NODE_COMPOSE" ] || continue
+    infoln "Derrubando containers de nós ($NODE_COMPOSE)..."
+    docker-compose -f "$NODE_COMPOSE" -p "$PROJECT_NET" down --volumes --remove-orphans \
+        || errorln "Falha ao derrubar $NODE_COMPOSE. Pode haver resíduos."
+done
+
+# Purga volumes nomeados do projeto por PADRÃO — robusto a compose ausente/renomeado.
+# É o que evita o 405 "channel already exists": o ledger/estado de canal do orderer
+# vive num volume nomeado (${NETWORK_BASE}_net_ordererN.dominio) que o `down` só
+# remove se o compose que o declarou ainda existir na hora do clean.
+infoln "Removendo volumes nomeados do projeto (${NETWORK_BASE}_net_* / _ca_*)..."
+docker volume ls -q | grep -E "^${NETWORK_BASE}_(net|ca)_" | xargs -r docker volume rm -f 2>/dev/null || true
 
 # limpa a pasta network/ (organizations, compose, genesis block)
 if [ -d "$PROJECT_ROOT/network" ]; then
