@@ -224,6 +224,25 @@ def main():
     # ── CATEGORIZAÇÃO por tipo × severidade ────────────────────────────────────
     cat_linhas = categorizacao(mo) if mo else []
 
+    # ── Quebra por OUTCOME: rejeição DURA vs review (barra suave) ──────────────
+    outcome_rows = []
+    if mo:
+        mr = int(v(mo, 'mut_via_reject', 'count'))
+        mv = int(v(mo, 'mut_via_review', 'count'))
+        lr = int(v(mo, 'limpo_via_reject', 'count'))
+        lv = int(v(mo, 'limpo_via_review', 'count'))
+        print('\n' + '=' * 70)
+        print('  QUEBRA POR OUTCOME — rejeição dura vs review (barra suave)')
+        print('=' * 70)
+        print(f'  {"grupo":22} {"reject":>8} {"review":>8}')
+        print(f'  {"mutante (barrado)":22} {mr:>8} {mv:>8}')
+        print(f'  {"limpo (FP)":22} {lr:>8} {lv:>8}')
+        if lv > 0 and lr == 0:
+            print(f'  [OK] Todos os {lv} FP foram REVIEW (0 rejeição dura de doc limpo).')
+        # Como todo FP limpo é review (lr=0), o split por classe = os FP por classe
+        # já mostrados na categorização (aqui: 127 em quase_limite).
+        outcome_rows = [['mutante', mr, mv], ['limpo', lr, lv]]
+
     # ── LATÊNCIA ──────────────────────────────────────────────────────────────
     print('\n' + '=' * 70)
     print('  LATÊNCIA (ms) — avg / med / p95')
@@ -301,6 +320,13 @@ def main():
             for row in cat_linhas:
                 w.writerow(row)
         salvos.append('resultados/comparacao_categorizacao.csv')
+
+    if outcome_rows:
+        with open('resultados/comparacao_outcome.csv', 'w', newline='') as f:
+            w = csv.writer(f)
+            w.writerow(['grupo', 'via_reject', 'via_review'])
+            w.writerows(outcome_rows)
+        salvos.append('resultados/comparacao_outcome.csv')
 
     print('\n[OK] CSVs salvos:')
     for s in salvos:
