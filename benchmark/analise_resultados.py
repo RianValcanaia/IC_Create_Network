@@ -75,6 +75,8 @@ METRICAS_INTERESSE = {
     'latencia_polling_ms', 'dos_timeout', 'dos_erro', 'dos_erro_polling',
     'http_req_duration', 'http_req_waiting', 'http_req_receiving',
     'http_req_sending', 'iteration_duration', 'http_reqs',
+    # Oracle-specific (test_oracle.js)
+    'm0_oracle_rejeicoes',
 }
 
 def _detectar_run(arquivo: str) -> int:

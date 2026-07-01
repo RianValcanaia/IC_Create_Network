@@ -40,7 +40,7 @@ const dosErroPolling     = new Counter('dos_erro_polling');                 // d
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 
-const BASE_URL          = __ENV.BASE_URL || 'http://localhost:3000';
+const BASE_URL          = __ENV.BASE_URL || 'https://localhost';
 const POLLING_INTERVAL  = 1;    // segundos entre cada poll de status
 const POLLING_TIMEOUT   = 90;   // segundos máximos aguardando ancoragem
 

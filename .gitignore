@@ -1,1 +1,4 @@
 benchmark/resultados/
+
+benchmark/mutant_payloads.json
+benchmark/__pycache__/
