@@ -163,6 +163,46 @@ def main():
         with open(traj_path, 'w', newline='', encoding='utf-8') as f:
             csv.writer(f).writerows(traj_rows)
 
+    # ── REDENÇÃO: trajetória por MODELO de reputação (janela off/on) ────────────
+    # Só quando os CSVs têm a coluna `model` preenchida (make simulate-redemption:
+    # simulate-actors.ts com MODEL_LABEL). Compara o legado (plafona em 70+0,3·w2)
+    # com a janela deslizante TCO-DRL (recupera ~100 após os erros expirarem).
+    red_path = None
+    if tl and any((row.get('model') or '').strip() for row in tl):
+        por_modelo = defaultdict(lambda: defaultdict(list))  # (model, taxa) -> i -> [rep]
+        for row in tl:
+            modelo = (row.get('model') or '').strip()
+            taxa = _f(row['error_rate_pct'])
+            i    = _f(row['i'])
+            rep  = _f(row['reputation_score'])
+            if not modelo or taxa is None or i is None or rep is None:
+                continue
+            por_modelo[(modelo, taxa)][int(i)].append(rep)
+
+        red_rows = [['model', 'error_rate_pct', 'i', 'rep_mean', 'rep_ic95', 'n']]
+        for (modelo, taxa) in sorted(por_modelo):
+            for i in sorted(por_modelo[(modelo, taxa)]):
+                m, hw = media_ic95(por_modelo[(modelo, taxa)][i])
+                red_rows.append([modelo, f'{taxa:.2f}', i,
+                                 '' if m is None else round(m, 3),
+                                 '' if hw is None else round(hw, 3),
+                                 len(por_modelo[(modelo, taxa)][i])])
+        red_path = os.path.join(out_dir, 'atores_redencao.csv')
+        with open(red_path, 'w', newline='', encoding='utf-8') as f:
+            csv.writer(f).writerows(red_rows)
+
+        # Resumo no stdout: reputação final média por modelo × taxa
+        print('\n' + '=' * 78)
+        print('  REDENÇÃO — reputação final média por modelo × taxa de erro')
+        print('=' * 78)
+        print(f'  {"modelo":14} {"taxa%":>7} {"rep_final (média±IC95)":>26} {"n":>4}')
+        for (modelo, taxa) in sorted(por_modelo):
+            idxs = por_modelo[(modelo, taxa)]
+            ultimo = max(idxs)
+            m, hw = media_ic95(idxs[ultimo])
+            rep_str = f'{m:.2f} ± {hw:.2f}' if m is not None else '—'
+            print(f'  {modelo:14} {taxa:>7.2f} {rep_str:>26} {len(idxs[ultimo]):>4}')
+
     # ── REJEIÇÃO por severidade (agrega todos os erros submetidos) ─────────────
     sev_path = None
     if tl:
@@ -228,6 +268,8 @@ def main():
     print(f'     {curva_path}')
     if traj_path:
         print(f'     {traj_path}')
+    if red_path:
+        print(f'     {red_path}')
     if sev_path:
         print(f'     {sev_path}')
     if outcome_path:
