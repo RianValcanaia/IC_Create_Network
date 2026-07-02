@@ -231,17 +231,31 @@ def main():
         mv = int(v(mo, 'mut_via_review', 'count'))
         lr = int(v(mo, 'limpo_via_reject', 'count'))
         lv = int(v(mo, 'limpo_via_review', 'count'))
+        # split light/heavy (presente só em runs feitas com o k6 instrumentado)
+        ml = int(v(mo, 'mut_via_light_review', 'count'))
+        mh = int(v(mo, 'mut_via_heavy_review', 'count'))
+        ll = int(v(mo, 'limpo_via_light_review', 'count'))
+        lh = int(v(mo, 'limpo_via_heavy_review', 'count'))
+        tem_lh = (ml + mh + ll + lh) > 0
         print('\n' + '=' * 70)
         print('  QUEBRA POR OUTCOME — rejeição dura vs review (barra suave)')
         print('=' * 70)
-        print(f'  {"grupo":22} {"reject":>8} {"review":>8}')
-        print(f'  {"mutante (barrado)":22} {mr:>8} {mv:>8}')
-        print(f'  {"limpo (FP)":22} {lr:>8} {lv:>8}')
+        if tem_lh:
+            print(f'  {"grupo":22} {"reject":>8} {"review":>8} {"(light":>8} {"heavy)":>8}')
+            print(f'  {"mutante (barrado)":22} {mr:>8} {mv:>8} {ml:>8} {mh:>8}')
+            print(f'  {"limpo (FP)":22} {lr:>8} {lv:>8} {ll:>8} {lh:>8}')
+        else:
+            print(f'  {"grupo":22} {"reject":>8} {"review":>8}')
+            print(f'  {"mutante (barrado)":22} {mr:>8} {mv:>8}')
+            print(f'  {"limpo (FP)":22} {lr:>8} {lv:>8}')
+            print('  (split light/heavy indisponível — run feita antes da instrumentação;')
+            print('   use outcome_from_logs.py para recuperá-lo do Mongo)')
         if lv > 0 and lr == 0:
             print(f'  [OK] Todos os {lv} FP foram REVIEW (0 rejeição dura de doc limpo).')
-        # Como todo FP limpo é review (lr=0), o split por classe = os FP por classe
-        # já mostrados na categorização (aqui: 127 em quase_limite).
-        outcome_rows = [['mutante', mr, mv], ['limpo', lr, lv]]
+        outcome_rows = [
+            ['mutante', mr, mv, ml, mh],
+            ['limpo',   lr, lv, ll, lh],
+        ]
 
     # ── LATÊNCIA ──────────────────────────────────────────────────────────────
     print('\n' + '=' * 70)
@@ -324,7 +338,7 @@ def main():
     if outcome_rows:
         with open('resultados/comparacao_outcome.csv', 'w', newline='') as f:
             w = csv.writer(f)
-            w.writerow(['grupo', 'via_reject', 'via_review'])
+            w.writerow(['grupo', 'via_reject', 'via_review', 'via_light_review', 'via_heavy_review'])
             w.writerows(outcome_rows)
         salvos.append('resultados/comparacao_outcome.csv')
 

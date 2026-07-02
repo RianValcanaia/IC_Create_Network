@@ -58,9 +58,15 @@ const fpFalsoPositivo     = new Counter('oracle_fp_falso_pos');   // pass   → 
 // Granularidade dos 4 outcomes: separa rejeição DURA de envio a REVIEW.
 // (light_review/heavy_review não são rejeição — são revisão humana.)
 const mutViaReject        = new Counter('mut_via_reject');        // mutante → reject (barra dura)
-const mutViaReview        = new Counter('mut_via_review');        // mutante → review (barra suave)
+const mutViaReview        = new Counter('mut_via_review');        // mutante → review (agregado light+heavy)
 const limpoViaReject      = new Counter('limpo_via_reject');      // limpo   → reject (FP duro)
-const limpoViaReview      = new Counter('limpo_via_review');      // limpo   → review (FP suave)
+const limpoViaReview      = new Counter('limpo_via_review');      // limpo   → review (agregado light+heavy)
+
+// Split fino da revisão (light vs heavy) — antes só existia no /logs do Oracle.
+const mutViaLightReview   = new Counter('mut_via_light_review');
+const mutViaHeavyReview   = new Counter('mut_via_heavy_review');
+const limpoViaLightReview = new Counter('limpo_via_light_review');
+const limpoViaHeavyReview = new Counter('limpo_via_heavy_review');
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 
@@ -177,14 +183,24 @@ export default function () {
             fnVazamento.add(1, tag);                   // VAZOU — mutante ancorado
         } else {
             tpBloqueouCorreto.add(1, tag);             // barrado (acerto)
-            (isReview ? mutViaReview : mutViaReject).add(1, tag);
+            if (isReview) {
+                mutViaReview.add(1, tag);
+                (outcome === 'heavy_review' ? mutViaHeavyReview : mutViaLightReview).add(1, tag);
+            } else {
+                mutViaReject.add(1, tag);
+            }
         }
     } else {
         if (anchored) {
             tnAprovouCorreto.add(1, tag);              // aprovado e ancorado (acerto)
         } else {
             fpFalsoPositivo.add(1, tag);               // doc bom não ancorado
-            (isReview ? limpoViaReview : limpoViaReject).add(1, tag);
+            if (isReview) {
+                limpoViaReview.add(1, tag);
+                (outcome === 'heavy_review' ? limpoViaHeavyReview : limpoViaLightReview).add(1, tag);
+            } else {
+                limpoViaReject.add(1, tag);
+            }
         }
     }
 
