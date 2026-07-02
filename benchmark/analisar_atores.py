@@ -22,7 +22,7 @@ import csv
 import glob
 import os
 import sys
-from collections import defaultdict
+from collections import defaultdict, Counter
 
 # ── IC95 via t de Student (stdlib) ─────────────────────────────────────────────
 _T95 = {1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571, 6: 2.447, 7: 2.365,
@@ -194,12 +194,44 @@ def main():
             with open(sev_path, 'w', newline='', encoding='utf-8') as f:
                 csv.writer(f).writerows(sev_rows)
 
+    # ── DISTRIBUIÇÃO de OUTCOME por taxa de erro (= por ator) ──────────────────
+    # É aqui que light/heavy_review fazem sentido: grade = 0.6·compliance + 0.4·reputação,
+    # e a reputação cai com a taxa de erro do ator → mesmo doc recebe mais escrutínio.
+    outcome_path = None
+    if tl:
+        OCS = ['pass', 'light_review', 'heavy_review', 'reject']
+        por_taxa_oc = defaultdict(Counter)   # taxa de erro -> Counter(outcome)
+        for row in tl:
+            taxa = _f(row['error_rate_pct'])
+            oc = (row.get('outcome') or '').strip()
+            if oc not in OCS:
+                oc = 'erro_transporte'
+            por_taxa_oc[taxa][oc] += 1
+
+        print('\n' + '=' * 78)
+        print('  OUTCOME por taxa de erro do ator (10 réplicas) — escrutínio × reputação')
+        print('=' * 78)
+        print(f'  {"taxa%":>6} {"pass":>8} {"light_rev":>10} {"heavy_rev":>10} {"reject":>8} {"total":>8}')
+        oc_rows = [['error_rate_pct'] + OCS + ['erro_transporte', 'total']]
+        for taxa in sorted(por_taxa_oc):
+            c = por_taxa_oc[taxa]
+            tot = sum(c.values())
+            print(f'  {taxa:>6.2f} {c.get("pass",0):>8} {c.get("light_review",0):>10} '
+                  f'{c.get("heavy_review",0):>10} {c.get("reject",0):>8} {tot:>8}')
+            oc_rows.append([f'{taxa:.2f}'] + [c.get(o, 0) for o in OCS]
+                           + [c.get('erro_transporte', 0), tot])
+        outcome_path = os.path.join(out_dir, 'atores_outcome.csv')
+        with open(outcome_path, 'w', newline='', encoding='utf-8') as f:
+            csv.writer(f).writerows(oc_rows)
+
     print('\n[OK] CSVs salvos:')
     print(f'     {curva_path}')
     if traj_path:
         print(f'     {traj_path}')
     if sev_path:
         print(f'     {sev_path}')
+    if outcome_path:
+        print(f'     {outcome_path}')
 
 
 if __name__ == '__main__':
