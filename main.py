@@ -137,6 +137,7 @@ def _exporta_network_contexto(config, paths):
 
     context = {
         "domain": config['network_topology']['network']['domain'],
+        "ip": config['network_topology'].get('ip', 'localhost'),
         "orderers": [
             {"name": node['name'], "port": node['port']}
             for node in config['network_topology']['orderer']['nodes']
@@ -179,7 +180,7 @@ def _network_up(controller, config, paths):
     _deploy_chaincode(controller, config, paths)
     
     co.infoln("Aguardando estabilização final do Chaincode (Porta 9999)...")
-    if _wait_for_port("localhost", 9999, timeout=120):
+    if _wait_for_port(config['network_topology'].get('ip', 'localhost'), 9999, timeout=120):
         co.successln("Chaincode está escutando na porta 9999!")
     else:
         co.warnln("Timeout: O Chaincode não respondeu na porta 9999 a tempo.")

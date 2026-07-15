@@ -16,7 +16,10 @@ class ConfigTxGenerator:
         self.paths = paths
         # define a saida do script e do configtx.yaml
         self.config_output_path = self.paths.network_dir / "configtx.yaml"
-        self.script_saida = self.paths.scripts_dir / "create_artifacts.sh"
+
+        network_name = self.config['network_topology']['network']['name']
+
+        self.script_saida = self.paths.scripts_dir / network_name / "create_artifacts.sh"
 
     def generate(self):        
         # gera as secoes do configtx.yaml
@@ -38,6 +41,7 @@ class ConfigTxGenerator:
         )
 
         # salva o arquivo
+        self.script_saida.parent.mkdir(parents=True, exist_ok=True)
         with open(self.config_output_path, 'w') as f:
             f.write(content)
         

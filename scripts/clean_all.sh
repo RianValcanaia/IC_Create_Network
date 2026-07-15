@@ -5,11 +5,64 @@
 source $(dirname "$0")/utils.sh
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-NETWORK_BASE=${NETWORK_NAME:-$(yq -r '.network.name' "${NETWORK_CONFIG:-$PROJECT_ROOT/project_config/network.yaml}")}
-PROJECT_CA="${NETWORK_BASE}_ca"
-PROJECT_NET="${NETWORK_BASE}_net"
+NETWORKS_ROOT="$PROJECT_ROOT/network"
+SCRIPTS_ROOT="$PROJECT_ROOT/scripts"
 
 infoln "Limpando ambiente no diretório: $PROJECT_ROOT"
+
+# derruba cada rede individualmente
+if [ -d "$NETWORKS_ROOT" ]; then
+    for NETWORK_DIR in "$NETWORKS_ROOT"/*/; do
+        [ -d "$NETWORK_DIR" ] || continue   # nenhuma subpasta encontrada
+        NETWORK_DIR="${NETWORK_DIR%/}"       # remove barra final
+        NETWORK_BASE="$(basename "$NETWORK_DIR")"
+        DOCKER_NET_NAME="${NETWORK_BASE}_net"
+
+        infoln "Derrubando rede: $NETWORK_BASE"
+
+        CA_COMPOSE="$NETWORK_DIR/compose/compose-ca.yaml"
+        if [ -f "$CA_COMPOSE" ]; then
+            infoln "Derrubando containers da CA ($NETWORK_BASE)..."
+            docker-compose -f "$CA_COMPOSE" -p "${NETWORK_BASE}_ca" down --volumes --remove-orphans \
+                && successln "CA de $NETWORK_BASE removida." \
+                || errorln "Falha ao derrubar CA de $NETWORK_BASE. Pode haver resíduos."
+        fi
+
+        NODE_COMPOSE="$NETWORK_DIR/compose/compose-nodes.yaml"
+        if [ -f "$NODE_COMPOSE" ]; then
+            infoln "Derrubando containers dos nós ($NETWORK_BASE)..."
+            docker-compose -f "$NODE_COMPOSE" -p "${NETWORK_BASE}_net" down --volumes --remove-orphans \
+                && successln "Nós de $NETWORK_BASE removidos." \
+                || errorln "Falha ao derrubar nós de $NETWORK_BASE. Pode haver resíduos."
+        fi
+
+        # remove qualquer container remanescente conectado à docker network desta rede
+        infoln "Limpando containers remanescentes de $NETWORK_BASE..."
+        docker ps -a --filter network="$DOCKER_NET_NAME" -q | xargs -r docker rm -f
+
+        # remove a docker network desta rede
+        if docker network inspect "$DOCKER_NET_NAME" >/dev/null 2>&1; then
+            infoln "Removendo Docker network $DOCKER_NET_NAME..."
+            docker network rm "$DOCKER_NET_NAME"
+        fi
+    done
+else
+    warnln "Pasta $NETWORKS_ROOT não existe. Nenhuma rede para derrubar."
+fi
+
+# verificação extra
+infoln "Verificando containers/networks órfãos com sufixo '_net' ou '_ca'..."
+docker ps -a --format '{{.Names}} {{.Networks}}' | awk '{print $1}' \
+    | while read -r cname; do
+        cnets=$(docker inspect --format '{{range $k,$v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$cname" 2>/dev/null)
+        for n in $cnets; do
+            if [[ "$n" == *_net ]]; then
+                warnln "Removendo container órfão '$cname' (rede $n)..."
+                docker rm -f "$cname" >/dev/null 2>&1
+                break
+            fi
+        done
+    done
 
 # remove pasta bin/
 if [ -d "$PROJECT_ROOT/bin" ]; then
@@ -29,76 +82,35 @@ else
     warnln "builders/ não existe. Ignorando."
 fi
 
-
-# remove arquivos especificos
-SCRIPTS_DIR="$PROJECT_ROOT/scripts"
-
-remove_if_exists "$SCRIPTS_DIR/register_enroll.sh"
-remove_if_exists "$SCRIPTS_DIR/create_artifacts.sh"
-remove_if_exists "$SCRIPTS_DIR/create_channel.sh"
-remove_if_exists "$SCRIPTS_DIR/deploy_chaincode.sh"
-
-
-infoln "Removendo arquivos docker-compose gerados..."
-
-# docker compose down
-CA_COMPOSE="$PROJECT_ROOT/network/compose/compose-ca.yaml"
-if [ -f "$CA_COMPOSE" ]; then
-    infoln "Encontrado compose-ca.yaml. Derrubando containers..."
-    docker-compose -f "$CA_COMPOSE" -p "$PROJECT_CA" down --volumes --remove-orphans
-    if [ $? -eq 0 ]; then
-        successln "Containers e volumes removidos com sucesso."
-    else
-        errorln "Falha ao executar docker-compose down. Pode haver resíduos."
-    fi
-else
-    warnln "Arquivo $CA_COMPOSE não encontrado. Pulando etapa de shutdown do Docker."
+# limpa pacotes de chaincode gerados
+CHAINCODE_DIR="$PROJECT_ROOT/chaincode"
+if [ -d "$CHAINCODE_DIR" ]; then
+    infoln "Limpando pacotes de chaincode gerados em $CHAINCODE_DIR..."
+    find "$CHAINCODE_DIR" -maxdepth 1 -type f \( -name "*.tar.gz" -o -name "*_collections.json" \) -print -delete
+    successln "Pacotes de chaincode removidos."
 fi
 
-# docker compose down
-NODE_COMPOSE="$PROJECT_ROOT/network/compose/compose-nodes.yaml"
-if [ -f "$NODE_COMPOSE" ]; then
-    infoln "Encontrado compose-nodes.yaml. Derrubando containers..."
-    docker-compose -f "$NODE_COMPOSE" -p "$PROJECT_NET" down --volumes --remove-orphans
-    if [ $? -eq 0 ]; then
-        successln "Containers e volumes removidos com sucesso."
-    else
-        errorln "Falha ao executar docker-compose down. Pode haver resíduos."
-    fi
+# limpa pasta network/
+if [ -d "$NETWORKS_ROOT" ]; then
+    infoln "Removendo todo o conteúdo de $NETWORKS_ROOT..."
+    fix_permissions "$NETWORKS_ROOT"
+    docker run --rm -v "$NETWORKS_ROOT":/data alpine sh -c 'rm -rf /data/*'
+    rm -rf "$NETWORKS_ROOT"/* 2>/dev/null || true
+    successln "Pasta $NETWORKS_ROOT limpa."
 else
-    warnln "Arquivo $NODE_COMPOSE não encontrado. Pulando etapa de shutdown do Docker."
+    warnln "Pasta $NETWORKS_ROOT não existe. Nada a limpar."
 fi
 
-# limpa a pasta network/ (organizations, compose, genesis block)
-if [ -d "$PROJECT_ROOT/network" ]; then
-    infoln "Removendo conteúdo gerado em network/..."
-
-    fix_permissions "$PROJECT_ROOT/network"
-
-    # container Alpine temporario para apagar os arquivos.
-    docker run --rm -v "$PROJECT_ROOT/network":/data alpine sh -c 'rm -rf /data/*'
-    
-    # se caso falhar o anterior, tenta apagar diretamente
-    rm -rf "$PROJECT_ROOT/network"/* 2>/dev/null || true
-    
-    successln "Pasta network/ limpa."
-else
-    warnln "Pasta network/ não existe. Nada a limpar."
+# apaga subpastas de scripts gerados
+if [ -d "$SCRIPTS_ROOT" ]; then
+    infoln "Removendo scripts gerados de todas as redes..."
+    for GEN_DIR in "$SCRIPTS_ROOT"/*/; do
+        [ -d "$GEN_DIR" ] || continue
+        GEN_DIR="${GEN_DIR%/}"
+        infoln "Removendo $GEN_DIR..."
+        rm -rf "$GEN_DIR"
+    done
+    successln "Scripts gerados removidos."
 fi
 
-infoln "Limpando containers de Chaincode (CCAAS)..."
-docker ps -a --format '{{.Names}}' | grep -E "\.channel-all|\.channel12" | xargs -I {} docker rm -f {} 2>/dev/null || true
-successln "Containers de chaincode removidos."
-
-# Remove Docker network criada
-
-PROJECT_NET="${NETWORK_BASE}_net"
-
-if docker network inspect "$PROJECT_NET" >/dev/null 2>&1; then
-    infoln "Removendo Docker network $PROJECT_NET..."
-    docker network rm "$PROJECT_NET"
-    successln "Network $PROJECT_NET removida."
-else
-    warnln "Docker network $PROJECT_NET não existe."
-fi
 successln "Limpeza concluída!"

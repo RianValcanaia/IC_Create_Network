@@ -7,9 +7,8 @@ source $(dirname "$0")/utils.sh
 
 # Define o diretório raiz do projeto
 # Se NETWORK_DIR vier do Python, usamos o pai dele como raiz, ou o diretório atual
-PROJECT_ROOT=${NETWORK_DIR%/network} # remove '/network' do final para pegar a raiz
 if [ -z "$PROJECT_ROOT" ]; then
-    PROJECT_ROOT="."
+    PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 fi
 
 # adiciona ./bin local ao PATH temporariamente para verificação

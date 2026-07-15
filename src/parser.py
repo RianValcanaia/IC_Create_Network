@@ -10,6 +10,7 @@ Rever: valida_chaincode
 """
 import os
 from .utils import Colors as co
+import ipaddress
 
 class ConfigParser:
     def __init__(self, config_completa):
@@ -80,12 +81,19 @@ class ConfigParser:
         
     def _valida_secao_network(self):
         """
-        Verifica nome e dominio da rede (nao podem ter espacos)
+        Verifica nome e dominio da rede (nao podem ter espacos) e se o IP é válido (se existir)
         """
         net = self.topologia.get('network', {})
         if self._chaves_obrigatorias(net, ['name', 'domain'], "seção 'network'"):
             if ' ' in net['domain']:
                 self.erros.append(f"Network Domain '{net['domain']}' não deve conter espaços.")
+
+        ip = self.topologia.get('ip')
+        if ip is not None:
+            try:
+                ipaddress.ip_address(ip)
+            except ValueError:
+                self.erros.append(f"Campo 'ip' inválido: '{ip}'. Deve ser um endereço IPv4/IPv6 válido.")
 
     def _valida_organizacoes(self):
         """

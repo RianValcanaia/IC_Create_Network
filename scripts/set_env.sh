@@ -25,13 +25,14 @@ fi
 DOMAIN=$(jq -r '.domain' "$CONTEXT_FILE")
 MSP_ID=$(jq -r ".orgs[\"$ORG\"].msp_id" "$CONTEXT_FILE")
 PORT=$(jq -r ".orgs[\"$ORG\"].peers[\"$PEER\"].port" "$CONTEXT_FILE")
+IP=$(jq -r '.ip // "localhost"' "$CONTEXT_FILE")
 
 # 5. Export de variáveis do Fabric
 export PATH="$PATH:$PROJECT_ROOT/bin"
 export FABRIC_CFG_PATH="$PROJECT_ROOT/network/compose/peercfg"
 export CORE_PEER_TLS_ENABLED=true
 export CORE_PEER_LOCALMSPID="$MSP_ID"
-export CORE_PEER_ADDRESS="localhost:$PORT"
+export CORE_PEER_ADDRESS="$IP:$PORT"
 export CORE_PEER_TLS_ROOTCERT_FILE="$PROJECT_ROOT/network/organizations/peerOrganizations/${ORG}.${DOMAIN}/peers/${PEER}.${ORG}.${DOMAIN}/tls/ca.crt"
 export CORE_PEER_MSPCONFIGPATH="$PROJECT_ROOT/network/organizations/peerOrganizations/${ORG}.${DOMAIN}/users/Admin@${ORG}.${DOMAIN}/msp"
 

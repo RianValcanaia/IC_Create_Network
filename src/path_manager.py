@@ -9,6 +9,7 @@ artefatos da rede, garantindo que a estrutura de diretórios necessária
 
 import os
 from pathlib import Path
+import yaml
 
 class PathManager:
     def __init__(self, custom_network_yaml):
@@ -17,16 +18,30 @@ class PathManager:
         
         # caminhos principais
         self.config_dir = self.base_dir / "project_config"
-        self.network_dir = self.base_dir / "network"
         self.scripts_dir = self.base_dir / "scripts"
         self.templates_dir = self.base_dir / "template"
         self.versions_yaml = self.config_dir / "versions.yaml"
         self.chaincode_dir = self.base_dir / "chaincode"
-        
+
         self.network_yaml = Path(custom_network_yaml).resolve()
+        network_name = self._peek_network_name(self.network_yaml)
+        
+        self.network_dir = self.base_dir / "network" / network_name
 
         self.core_yaml_template = self.config_dir / "core.yaml"
         self.peer_cfg_dir = self.network_dir / "compose" / "peercfg"
+
+        # pasta dos scripts gerados desta rede
+        self.generated_scripts_dir = self.scripts_dir / network_name
+
+    def _peek_network_name(self, yaml_path):
+        with open(yaml_path, 'r') as f:
+            data = yaml.safe_load(f)
+        try:
+            return data['network']['name']
+        except (KeyError, TypeError):
+            raise ValueError(f"'{yaml_path}' precisa definir network.name para isolar os artefatos em disco.")
+
 
     def get_paths(self):
         """Retorna um dicionário com todos os caminhos convertidos para string"""
@@ -43,6 +58,9 @@ class PathManager:
         subdirs = ["organizations", "channel-artifacts", "docker", "compose/peercfg"]
         for sub in subdirs:
             (self.network_dir / sub).mkdir(parents=True, exist_ok=True)
+        
+        # garante a pasta de scripts gerados desta rede
+        self.generated_scripts_dir.mkdir(parents=True, exist_ok=True)
 
 if __name__ == "__main__":
     print("Caminhos configurados:")

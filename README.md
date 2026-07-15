@@ -33,11 +33,15 @@ O objetivo final deste projeto é fornecer uma ferramenta de linha de comando qu
 * **Artefatos de Rede**: Criação do bloco gênese e transações de canal baseadas na topologia.
 * **Ciclo de Vida de Chaincode**: Instalação e definição de contratos inteligentes nos canais especificados.
 
+> A versão atual consegue subir mais de uma rede, desde que cada uma tenha seu próprio arquivo `.yaml` em `project_config/`
+>
+> **Obs.:** As redes devem subir sequencialmente. Subi-las em paralelo pode resultar em erros.
+
 [⬆ Voltar ao topo](#topo)
 
 ## 📥 Entradas do sistema
 
-O sistema é alimentado por dois arquivos de configuração principais na pasta `/config`:
+O sistema é alimentado por dois arquivos de configuração principais na pasta `project_config/`:
 * `network.yaml`: Define a topologia (Organizações, Peers, Orderers, Canais e Chaincodes).
 * `versions.yaml`: Controla as versões do Fabric, Fabric-CA e Go.
 
@@ -80,6 +84,9 @@ network:
   name: "FabricNetwork"
   # Domínio base para a resolução de nomes. Todos os nós seguirão o padrão: nome.dominio.
   domain: "exemplo.com"
+
+# Campo opcional para o caso de criar redes na mesma máquina usando redes virtuais
+ip: "127.0.0.0"
 ```
 ### 2. Serviço de Ordenação (Orderer)
 Configura o consendo e os limites de criação de blocos. O Projeto suporta EtcdRaft e SmartBFT.
@@ -198,6 +205,8 @@ python3 main.py --network ./project_config/network_BFT.yaml --clean net
 ```bash
 python3 main.py --network ./project_config/network_BFT.yaml --clean all
 ```
+| ⚠️ A limpeza total removerá **todas** as redes administradas pelo automatizador (independente do arquivo passado em `--network`)
+
 ### 3. Interagir com o Ledger
 Após a rede estar ativa, você pode usar o utilitário CLI incluso para realizar transações rápidas:
 - Iniciar o Ledger:

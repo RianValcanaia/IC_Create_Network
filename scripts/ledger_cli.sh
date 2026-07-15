@@ -24,6 +24,7 @@ CC_NAME="basic_asset"
 ORDERER_PORT=$(jq -r '.orderers[0].port' "$CONTEXT_FILE")
 ORDERER_NAME=$(jq -r '.orderers[0].name' "$CONTEXT_FILE")
 ORDERER_CA="$PROJECT_ROOT/network/organizations/ordererOrganizations/${DOMAIN}/orderers/${ORDERER_NAME}.${DOMAIN}/tls/ca.crt"
+IP=$(jq -r '.ip // "localhost"' "$CONTEXT_FILE")
 # --- Função para Montar Flags de Endosso (Dinamismo Puro) ---
 # Esta função percorre todas as Orgs do JSON e pega o primeiro peer de cada uma
 generate_peer_args() {
@@ -38,7 +39,7 @@ generate_peer_args() {
         # Constrói o caminho do certificado TLS
         TLS_PATH="$PROJECT_ROOT/network/organizations/peerOrganizations/${ORG}.${DOMAIN}/peers/${FIRST_PEER}.${ORG}.${DOMAIN}/tls/ca.crt"
         
-        ARGS="$ARGS --peerAddresses localhost:${PORT} --tlsRootCertFiles ${TLS_PATH}"
+        ARGS="$ARGS --peerAddresses ${IP}:${PORT} --tlsRootCertFiles ${TLS_PATH}"
     done
     echo "$ARGS"
 }
@@ -49,11 +50,11 @@ PEER_ARGS=$(generate_peer_args)
 case $ACTION in
     init)
         infon "Inicializando Ledger em todas as Orgs..."
-        peer chaincode invoke -o localhost:${ORDERER_PORT} --ordererTLSHostnameOverride ${ORDERER_NAME}.${DOMAIN} --tls --cafile "$ORDERER_CA" -C "$CHANNEL_NAME" -n "$CC_NAME" $PEER_ARGS -c '{"function":"InitLedger","Args":[]}' 
+        peer chaincode invoke -o ${IP}:${ORDERER_PORT} --ordererTLSHostnameOverride ${ORDERER_NAME}.${DOMAIN} --tls --cafile "$ORDERER_CA" -C "$CHANNEL_NAME" -n "$CC_NAME" $PEER_ARGS -c '{"function":"InitLedger","Args":[]}' 
         ;;
     create)
         infon "Criando Asset $ID..."
-        peer chaincode invoke -o localhost:${ORDERER_PORT} --ordererTLSHostnameOverride ${ORDERER_NAME}.${DOMAIN} --tls --cafile "$ORDERER_CA" -C "$CHANNEL_NAME" -n "$CC_NAME" $PEER_ARGS -c "{\"function\":\"CreateAsset\",\"Args\":[\"$ID\",\"$5\",\"$6\",\"$7\",\"$8\"]}"
+        peer chaincode invoke -o ${IP}:${ORDERER_PORT} --ordererTLSHostnameOverride ${ORDERER_NAME}.${DOMAIN} --tls --cafile "$ORDERER_CA" -C "$CHANNEL_NAME" -n "$CC_NAME" $PEER_ARGS -c "{\"function\":\"CreateAsset\",\"Args\":[\"$ID\",\"$5\",\"$6\",\"$7\",\"$8\"]}"
         ;;
     read)
         infon "Lendo Asset $ID (Consulta Local)..."
@@ -61,7 +62,7 @@ case $ACTION in
         ;;
     update)
         infon "Atualizando Asset $ID..."
-        peer chaincode invoke -o localhost:${ORDERER_PORT} --ordererTLSHostnameOverride ${ORDERER_NAME}.${DOMAIN} --tls --cafile "$ORDERER_CA" -C "$CHANNEL_NAME" -n "$CC_NAME" $PEER_ARGS -c "{\"function\":\"UpdateAsset\",\"Args\":[\"$ID\",\"$5\",\"$6\",\"$7\",\"$8\"]}"
+        peer chaincode invoke -o ${IP}:${ORDERER_PORT} --ordererTLSHostnameOverride ${ORDERER_NAME}.${DOMAIN} --tls --cafile "$ORDERER_CA" -C "$CHANNEL_NAME" -n "$CC_NAME" $PEER_ARGS -c "{\"function\":\"UpdateAsset\",\"Args\":[\"$ID\",\"$5\",\"$6\",\"$7\",\"$8\"]}"
         ;;
     all)
         infon "Listando todos os Assets..."
@@ -78,7 +79,7 @@ case $ACTION in
         fi
         infon "Invocando função em $INVOKE_CC..."
         peer chaincode invoke \
-            -o localhost:${ORDERER_PORT} \
+            -o ${IP}:${ORDERER_PORT} \
             --ordererTLSHostnameOverride ${ORDERER_NAME}.${DOMAIN} \
             --tls --cafile "$ORDERER_CA" \
             -C "$CHANNEL_NAME" -n "$INVOKE_CC" \

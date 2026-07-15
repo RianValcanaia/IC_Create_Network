@@ -37,3 +37,11 @@ class Colors:
     @staticmethod
     def warnln(msg: str):
         print(f"{Colors.YELLOW}[AVISO] [!] {msg}{Colors.RESET}")
+
+def get_bind_ip(config, default="0.0.0.0"):
+    """Retorna o IP definido no network_BFT.yaml (raiz), ou um default."""
+    return config['network_topology'].get('ip', default)
+
+def get_connect_host(config, default="localhost"):
+    """IP/host que os scripts CLI (fabric-ca-client, peer, osnadmin) devem usar."""
+    return config['network_topology'].get('ip', default)

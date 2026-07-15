@@ -13,6 +13,7 @@ import os
 import yaml
 import shutil
 from ..utils import Colors as co
+from ..utils import get_bind_ip
 
 class ComposeGenerator:
     def __init__(self, config, paths):
@@ -20,6 +21,7 @@ class ComposeGenerator:
         self.config = config
         self.paths = paths
         self.compose_dir = self.paths.network_dir / "compose"
+        self.ip = get_bind_ip(self.config)  # ex: "10.10.20.160" ou None
 
     # gera o arquivo que sobe todas as CAs da rede
     def generate_ca_compose(self):   
@@ -37,6 +39,7 @@ class ComposeGenerator:
             ca_config = org['ca']
             org_name = org['name']
             service_name = ca_config['name']
+            container_name = f"{service_name}-{network_name}"  # nome único no host Docker
             port = ca_config['port']
             
             # caminho interno do container onde a CA guarda seus dados
@@ -46,7 +49,7 @@ class ComposeGenerator:
             services[service_name] = {
                 'image': f"{img_prefix}/fabric-ca:{ca_version}",
                 'labels': {'service': "hyperledger-fabric-ca"},
-                'container_name': service_name,
+                'container_name': container_name,
                 'environment': [
                     f"FABRIC_CA_HOME={ca_server_home}",
                     f"FABRIC_CA_SERVER_CA_NAME={service_name}",
@@ -55,7 +58,7 @@ class ComposeGenerator:
                     "FABRIC_CA_SERVER_CSR_CN=" + service_name,
                     "FABRIC_CA_SERVER_CSR_HOSTS=0.0.0.0",
                 ],
-                'ports': [f"{port}:{port}"],
+                'ports': [f"{self.ip}:{port}:{port}" if self.ip else f"{port}:{port}"],
                 'command': "sh -c 'fabric-ca-server start -b admin:adminpw -d'",
                 'volumes': [
                     f"../organizations/fabric-ca/{org_name}:{ca_server_home}"
@@ -69,11 +72,12 @@ class ComposeGenerator:
         ord_ca_name = ord_ca.get('name', 'ca-orderer')
         ord_ca_port = ord_ca.get('port', 7054)
         ord_org_folder = "ordererOrg" 
+        ord_container_name = f"{ord_ca_name}-{network_name}"
         
         services[ord_ca_name] = {
             'image': f"{img_prefix}/fabric-ca:{ca_version}",
             'labels': {'service': "hyperledger-fabric-ca"},
-            'container_name': ord_ca_name,
+            'container_name': ord_container_name,
             'environment': [
                 f"FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server",
                 f"FABRIC_CA_SERVER_CA_NAME={ord_ca_name}",
@@ -82,7 +86,7 @@ class ComposeGenerator:
                 f"FABRIC_CA_SERVER_CSR_CN={ord_ca_name}",
                 "FABRIC_CA_SERVER_CSR_HOSTS=0.0.0.0",
             ],
-            'ports': [f"{ord_ca_port}:{ord_ca_port}"],
+            'ports': [f"{self.ip}:{ord_ca_port}:{ord_ca_port}" if self.ip else f"{port}:{port}"],
             'command': "sh -c 'fabric-ca-server start -b admin:adminpw -d'",
             'volumes': [
                 f"../organizations/fabric-ca/{ord_org_folder}:/etc/hyperledger/fabric-ca-server"
@@ -168,8 +172,8 @@ class ComposeGenerator:
                     f"{full_name}:/var/hyperledger/production/orderer"  # dados do ledger persistente
                 ],
                 'ports': [
-                    f"{node['port']}:{node['port']}",
-                    f"{node['admin_port']}:{node['admin_port']}"
+                    f"{self.ip}:{node['port']}:{node['port']}" if self.ip else f"{node['port']}:{node['port']}",
+                    f"{self.ip}:{node['admin_port']}:{node['admin_port']}" if self.ip else f"{node['admin_port']}:{node['admin_port']}"
                 ],
                 'networks': [network_name]
             }
@@ -214,9 +218,9 @@ class ComposeGenerator:
                         "./peercfg:/etc/hyperledger/peercfg", 
                         f"../organizations/peerOrganizations/{org['name']}.{domain}/peers/{p_full}:/etc/hyperledger/fabric",
                         f"{p_full}:/var/hyperledger/production",
-                        f"../../builders/ccaas:/opt/hyperledger/ccaas_builder"  # builder necessario para o modelo CCAAS
+                        f"../../../builders/ccaas:/opt/hyperledger/ccaas_builder"  # builder necessario para o modelo CCAAS
                     ],
-                    'ports': [f"{peer['port']}:{peer['port']}"],
+                    'ports': [f"{self.ip}:{peer['port']}:{peer['port']}" if self.ip else f"{peer['port']}:{peer['port']}"],
                     'networks': [network_name], 
                     'command': 'peer node start'
                 }
@@ -276,13 +280,20 @@ class ComposeGenerator:
                 #     "tlsCACerts": {"path": str(tls_cert_path)},
                 #     "grpcOptions": {"ssl-target-name-override": p_full}
                 # }
-                ccp["peers"][p_full] = {
-                    "url": f"grpcs://{p_full}:{peer['port']}", # Usa o nome do container (ex: peer0.Org1.exemplo.com)
-                    "tlsCACerts": {"path": str(tls_cert_path)},
-                    "grpcOptions": {"ssl-target-name-override": p_full}
-                }
+                if self.ip:
+                    ccp["peers"][p_full] = {
+                        "url": f"grpcs://{self.ip}:{peer['port']}", # Usa o ip definido
+                        "tlsCACerts": {"path": str(tls_cert_path)},
+                        "grpcOptions": {"ssl-target-name-override": p_full}
+                    }
+                else:
+                    ccp["peers"][p_full] = {
+                        "url": f"grpcs://{p_full}:{peer['port']}", # Usa o nome do container (ex: peer0.Org1.exemplo.com)
+                        "tlsCACerts": {"path": str(tls_cert_path)},
+                        "grpcOptions": {"ssl-target-name-override": p_full}
+                    }
 
-            # apreenche os detalhes da CA no perfil de conexao
+            # preenche os detalhes da CA no perfil de conexao
             ca_name = org['ca']['name']
             ca_cert_path = f"../organizations/peerOrganizations/{org_name}.{domain}/msp/cacerts/localhost-{org['ca']['port']}-{ca_name}.pem"
             

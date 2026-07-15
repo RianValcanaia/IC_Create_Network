@@ -18,8 +18,12 @@ class ChaincodeDeployGenerator:
     def __init__(self, config, paths):
         self.config = config
         self.paths = paths
-        self.script_saida = self.paths.scripts_dir / "deploy_chaincode.sh"
+
+        network_name = self.config['network_topology']['network']['name']
+        self.script_saida = self.paths.scripts_dir / network_name / "deploy_chaincode.sh"
+
         self._generate_collections_json()
+        self.ip = self.config['network_topology'].get('ip')
 
     def generate(self):
         linhas = [
@@ -39,8 +43,8 @@ class ChaincodeDeployGenerator:
             img_prefix = self.config['env_versions']['images']['org_hyperledger']
             fabric_version = self.config['env_versions']['versions']['fabric']
 
-            package_file = (self.paths.chaincode_dir / f"{cc['name']}.tar.gz").resolve()
-            pdc_config = (self.paths.chaincode_dir / f"{cc['name']}_collections.json").resolve()
+            package_file = (self.paths.chaincode_dir / f"{cc['name']}-{network_name}.tar.gz").resolve()
+            pdc_config = (self.paths.chaincode_dir / f"{cc['name']}-{network_name}_collections.json").resolve()
             
             # caminho absoluto da pasta do chaincode vindo do Python
             abs_cc_path = self.paths.chaincode_dir / cc['name']
@@ -56,7 +60,9 @@ class ChaincodeDeployGenerator:
             )
             os.system(compile_cmd)
 
-            self._create_ccaas_package(cc, package_file)
+            cc_container_name = f"{cc['name']}.{cc['channel']}.{network_name}"  # evita conflito de nomes entre redes
+
+            self._create_ccaas_package(cc, package_file, cc_container_name)
 
             # --- instalação ---
             for org in self.config['network_topology']['organizations']:
@@ -70,15 +76,15 @@ class ChaincodeDeployGenerator:
             linhas.append(f"PACKAGE_ID=$(peer lifecycle chaincode queryinstalled | grep '{cc['name']}_{cc['version']}' | head -n 1 | sed -n 's/^Package ID: //; s/, Label:.*$//p')")
             
             cc_service = f"{cc['name']}.{cc['channel']}"
-            linhas.append(f"docker rm -f {cc_service} 2>/dev/null || true")
+            linhas.append(f"docker rm -f {cc_container_name} 2>/dev/null || true")
             
             # usando caminho absoluto direto do PathManager
             linhas.append(f"fix_permissions '{abs_cc_path}'")
 
             # cada chaincode expõe sua própria porta (cc_port)
-            linhas.append(f"docker run -d --name {cc_service} --network {network_name}_net "
+            linhas.append(f"docker run -d --name {cc_container_name} --network {network_name}_net "
                         f"--dns 8.8.8.8 "
-                        f"-p {cc_port}:{cc_port} "
+                        f"-p {self.ip+':' if self.ip else ''}{cc_port}:{cc_port} "
                         f"-e CHAINCODE_SERVER_ADDRESS=0.0.0.0:{cc_port} "
                         f"-e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID "
                         f"-v {abs_cc_path}:/opt/gopath/src/chaincode "
@@ -95,7 +101,7 @@ class ChaincodeDeployGenerator:
                 
                 approve_cmd = (
                     f"peer lifecycle chaincode approveformyorg "
-                    f"-o localhost:{orderer['port']} --ordererTLSHostnameOverride {orderer['name']}.{domain} "
+                    f"-o {self.ip or 'localhost'}:{orderer['port']} --ordererTLSHostnameOverride {orderer['name']}.{domain} "
                     f"--tls --cafile {ord_tls_ca} --channelID {cc['channel']} --name {cc['name']} "
                     f"--version {cc['version']} --package-id $PACKAGE_ID --sequence {cc['sequence']} "
                     f"--collections-config {pdc_config} "
@@ -108,13 +114,13 @@ class ChaincodeDeployGenerator:
             tls_root_cas = ""
             for org in self.config['network_topology']['organizations']:
                 peer = org['peers'][0]
-                peer_addresses += f" --peerAddresses localhost:{peer['port']}"
+                peer_addresses += f" --peerAddresses {self.ip or 'localhost'}:{peer['port']}"
                 tls_ca = (self.paths.network_dir / "organizations" / "peerOrganizations" / f"{org['name']}.{domain}" / "peers" / f"{peer['name']}.{org['name']}.{domain}" / "tls" / "ca.crt").resolve()
                 tls_root_cas += f" --tlsRootCertFiles {tls_ca}"
 
             commit_cmd = (
                 f"peer lifecycle chaincode commit "
-                f"-o localhost:{orderer['port']} --ordererTLSHostnameOverride {orderer['name']}.{domain} "
+                f"-o {self.ip or 'localhost'}:{orderer['port']} --ordererTLSHostnameOverride {orderer['name']}.{domain} "
                 f"--tls --cafile {ord_tls_ca} --channelID {cc['channel']} --name {cc['name']} "
                 f"--version {cc['version']} --sequence {cc['sequence']} "
                 f"--collections-config {pdc_config} "
@@ -125,6 +131,7 @@ class ChaincodeDeployGenerator:
             linhas.append(f"\nsuccessln 'Deploy do chaincode {cc['name']} concluído com sucesso!'")
 
         # escrita do arquivo movida para o final (após processar todos os CCs)
+        self.script_saida.parent.mkdir(parents=True, exist_ok=True)
         with open(self.script_saida, 'w') as f:
             f.write("\n".join(linhas))
         os.chmod(self.script_saida, os.stat(self.script_saida).st_mode | stat.S_IEXEC)
@@ -138,7 +145,7 @@ class ChaincodeDeployGenerator:
             f"export CORE_PEER_LOCALMSPID={org['msp_id']}",
             f"export CORE_PEER_TLS_ROOTCERT_FILE={peer_base}/peers/{p_full}/tls/ca.crt",
             f"export CORE_PEER_MSPCONFIGPATH={peer_base}/users/Admin@{org['name']}.{domain}/msp",
-            f"export CORE_PEER_ADDRESS=localhost:{peer['port']}"
+            f"export CORE_PEER_ADDRESS={self.ip or 'localhost'}:{peer['port']}"
         ]
     
     def _generate_collections_json(self):
@@ -155,13 +162,14 @@ class ChaincodeDeployGenerator:
                     "memberOnlyWrite": self._resolve_bool_field(pdc_info.get('member_only_write', False))
                 })
             # salva um ficheiro por chaincode
-            output_path = self.paths.chaincode_dir / f"{cc['name']}_collections.json"
+            network_name = self.config['network_topology']['network']['name']
+            output_path = self.paths.chaincode_dir / f"{cc['name']}-{network_name}_collections.json"
             with open(output_path, 'w') as f:
                 json.dump(collections, f, indent=4)
 
-    def _create_ccaas_package(self, cc, output_path):
+    def _create_ccaas_package(self, cc, output_path, container_name):
         connection = {
-            "address": f"{cc['name']}.{cc['channel']}:{cc['port']}",  # porta dinâmica por chaincode
+            "address": f"{container_name}:{cc['port']}",  # porta dinâmica por chaincode
             "dial_timeout": "10s",
             "tls_required": False
         }

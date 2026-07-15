@@ -8,15 +8,19 @@ join para que os Peers participem dos canais definidos na topologia.
 import os
 import stat
 from ..utils import Colors as co
+from ..utils import get_connect_host
 
 class ChannelScriptGenerator:
     def __init__(self, config, paths):
         # inicializa a referencia de caminhos
         self.config = config
         self.paths = paths
+        self.ip = get_connect_host(self.config)
+        
+        network_name = self.config['network_topology']['network']['name']
 
         # caminho do script de saída
-        self.script_saida = self.paths.scripts_dir / "create_channel.sh"
+        self.script_saida = self.paths.scripts_dir / network_name / "create_channel.sh"
 
     def generate_channel_script(self):
         # coleta dados da topologia
@@ -37,7 +41,7 @@ class ChannelScriptGenerator:
         # define variaveis de ambiente TLs para que o script possa falar com o orderer
         ord_full = f"{orderer_node['name']}.{domain}"
         ord_tls_path = f"{self.paths.network_dir}/organizations/ordererOrganizations/{domain}/orderers/{ord_full}/tls"
-        ord_address = f"localhost:{orderer_node['port']}"
+        ord_address = f"{self.ip or 'localhost'}:{orderer_node['port']}"
         
         linhas.append(f"export ORD_CA={ord_tls_path}/ca.crt")
         linhas.append(f"export ORD_ADMIN_CERT={ord_tls_path}/server.crt")
@@ -52,7 +56,7 @@ class ChannelScriptGenerator:
                 f"--cert {node_tls}/server.crt "
                 f"--key {node_tls}/server.key "
                 f"--cacert {node_tls}/ca.crt "
-                f"https://localhost:{node['admin_port']}/participation/v1/channels "
+                f"https://{self.ip or 'localhost'}:{node['admin_port']}/participation/v1/channels "
                 f">/dev/null 2>&1; do "
                 f"echo 'Aguardando {node_name}...'; sleep 2; done"
             )
@@ -71,7 +75,7 @@ class ChannelScriptGenerator:
                 
                 cmd_osn = (
                     f"osnadmin channel join --channelID {ch_name} "
-                    f"--config-block {block_path} -o localhost:{node['admin_port']} "
+                    f"--config-block {block_path} -o {self.ip or 'localhost'}:{node['admin_port']} "
                     f"--ca-file {node_tls_path}/ca.crt "
                     f"--client-cert {node_tls_path}/server.crt "
                     f"--client-key {node_tls_path}/server.key"
@@ -94,7 +98,7 @@ class ChannelScriptGenerator:
                     linhas.append(f"export CORE_PEER_LOCALMSPID={org_data['msp_id']}")
                     linhas.append(f"export CORE_PEER_TLS_ROOTCERT_FILE={peer_base}/peers/{p_full}/tls/ca.crt")
                     linhas.append(f"export CORE_PEER_MSPCONFIGPATH={peer_base}/users/Admin@{org_name}.{domain}/msp")
-                    linhas.append(f"export CORE_PEER_ADDRESS=localhost:{peer['port']}")
+                    linhas.append(f"export CORE_PEER_ADDRESS={self.ip or 'localhost'}:{peer['port']}")
                     
                     linhas.append(f"peer channel join -b {block_path}")
 
@@ -102,6 +106,7 @@ class ChannelScriptGenerator:
                         linhas.append(f"updateAnchorPeer '{org_name}' '{org_data['msp_id']}' '{ch_name}' '{peer['name']}' '{peer['port']}' '{ord_address}'")
 
         # salva o arquivo
+        self.script_saida.parent.mkdir(parents=True, exist_ok=True)
         with open(self.script_saida, 'w') as f:
             f.write("\n".join(linhas))
         os.chmod(self.script_saida, os.stat(self.script_saida).st_mode | stat.S_IEXEC)

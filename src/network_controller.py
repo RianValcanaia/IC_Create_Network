@@ -51,6 +51,7 @@ class NetworkController:
             "DOCKER_IMAGE_PREFIX": images['org_hyperledger'],
             "NETWORK_NAME": network_name,
             "NETWORK_CONFIG": str(self.paths.network_yaml),
+            "PROJECT_ROOT": str(self.paths.base_dir),
             "PATH": f"{project_bin_path}:{system_path}"
         }
 
@@ -58,7 +59,10 @@ class NetworkController:
         """
         Executa um script bash localizado na pasta de scripts
         """
-        script_path = os.path.join(self.paths.scripts_dir, script_name)
+        network_name = self.config['network_topology']['network']['name']
+        generated_path = self.paths.scripts_dir / network_name / script_name
+        static_path = Path(self.paths.scripts_dir) / script_name
+        script_path = str(generated_path) if generated_path.exists() else str(static_path)
         
         # cria uma copia da variaveis de ambiente atuais do sistema e injeta as da rede
         env = os.environ.copy()
