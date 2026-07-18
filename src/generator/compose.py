@@ -21,7 +21,7 @@ class ComposeGenerator:
         self.config = config
         self.paths = paths
         self.compose_dir = self.paths.network_dir / "compose"
-        self.ip = get_bind_ip(self.config)  # ex: "10.10.20.160" ou None
+        self.ip = get_bind_ip(self.config)  # ex: "10.10.20.160" ou "0.0.0.0"
 
     # gera o arquivo que sobe todas as CAs da rede
     def generate_ca_compose(self):   
@@ -295,10 +295,12 @@ class ComposeGenerator:
 
             # preenche os detalhes da CA no perfil de conexao
             ca_name = org['ca']['name']
-            ca_cert_path = f"../organizations/peerOrganizations/{org_name}.{domain}/msp/cacerts/localhost-{org['ca']['port']}-{ca_name}.pem"
+            ip = self.config['network_topology'].get('ip')
+            ca_host = ip if ip else "localhost"
+            ca_cert_path = f"../organizations/peerOrganizations/{org_name}.{domain}/msp/cacerts/{ca_host}-{org['ca']['port']}-{ca_name}.pem"
             
             ccp["certificateAuthorities"][ca_name] = {
-                "url": f"https://localhost:{org['ca']['port']}",
+                "url": f"https://{ca_host}:{org['ca']['port']}",
                 "caName": ca_name,
                 "tlsCACerts": {"path": ca_cert_path},
                 "httpOptions": {"verify": False}

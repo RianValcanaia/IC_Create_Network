@@ -103,7 +103,7 @@ class ChannelScriptGenerator:
                     linhas.append(f"peer channel join -b {block_path}")
 
                     if idx == 0:
-                        linhas.append(f"updateAnchorPeer '{org_name}' '{org_data['msp_id']}' '{ch_name}' '{peer['name']}' '{peer['port']}' '{ord_address}'")
+                        linhas.append(f"updateAnchorPeer '{org_name}' '{org_data['msp_id']}' '{ch_name}' '{peer['name']}' '{peer['port']}' '{ord_address}' '{domain}'")
 
         # salva o arquivo
         self.script_saida.parent.mkdir(parents=True, exist_ok=True)
@@ -114,7 +114,7 @@ class ChannelScriptGenerator:
     def _get_anchor_peer_bash_function(self):
         return """
 function updateAnchorPeer() {
-    local org=$1; local msp=$2; local channel=$3; local peer_name=$4; local port=$5; local orderer=$6
+    local org=$1; local msp=$2; local channel=$3; local peer_name=$4; local port=$5; local orderer=$6; local domain=$7
     infoln "Definindo Anchor Peer para ${org} no canal ${channel}..."
 
     # 1. Fetch config
@@ -125,7 +125,7 @@ function updateAnchorPeer() {
     jq '.data.data[0].payload.data.config' config_block.json > config.json
 
     # 3. Adicionar o anchor peer no JSON
-    jq '.channel_group.groups.Application.groups.'${msp}'.values += {"AnchorPeers": {"mod_policy": "Admins","value": {"anchor_peers": [{"host": "'${peer_name}.${org}'.exemplo.com","port": '${port}'}]},"version": "0"}}' config.json > config_updated.json
+    jq '.channel_group.groups.Application.groups.'${msp}'.values += {"AnchorPeers": {"mod_policy": "Admins","value": {"anchor_peers": [{"host": "'${peer_name}.${org}.${domain}'","port": '${port}'}]},"version": "0"}}' config.json > config_updated.json
 
     # 4. Re-encode e calcular delta
     configtxlator proto_encode --input config.json --type common.Config --output config.pb
