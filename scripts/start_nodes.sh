@@ -1,10 +1,11 @@
 #!/bin/bash
 # Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
+
 # Script bash estático que utiliza o Docker Compose para subir os containers dos Orderers e dos Peers da rede.
 
 source $(dirname "$0")/utils.sh 
 
-COMPOSE_FILE="$NETWORK_DIR/compose/compose-nodes.yaml" 
+COMPOSE_FILE="${COMPOSE_FILE:-$NETWORK_DIR/compose/compose-nodes.yaml}"
 
 if [ ! -f "$COMPOSE_FILE" ]; then
     errorln "Arquivo não encontrado: $COMPOSE_FILE"

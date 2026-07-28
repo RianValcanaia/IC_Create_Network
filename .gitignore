@@ -1,0 +1,33 @@
+# Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
+
+# --- Binários do Hyperledger Fabric (baixados automaticamente por check_reqs.sh) ---
+# Ancorado na raiz: NÃO deve afetar builders/ccaas/bin/ (versionado, tarefa 3).
+/bin/
+
+# --- Artefatos de runtime da(s) rede(s) (layout network/<pasta> por rede) ---
+network/*
+!network/.gitkeep
+
+# --- Scripts gerados dinamicamente pelos *Generator (recriados a cada --up) ---
+scripts/register_enroll.sh
+scripts/create_artifacts.sh
+scripts/create_channel.sh
+scripts/deploy_chaincode.sh
+scripts/redeploy_chaincode.sh
+scripts/start_chaincodes.sh
+
+# --- Artefatos de chaincode gerados pelo ChaincodeDeployGenerator ---
+chaincode/*.tar.gz
+chaincode/*_collections.json
+chaincode/*/chaincode
+
+# --- Cache do Python ---
+__pycache__/
+*.pyc
+
+# --- Diversos ---
+.DS_Store
+
+# --- Configuração local do Claude Code ---
+.claude/
+.gitignore

@@ -110,14 +110,14 @@ channels:
 
 # Definicao de chaincodes
 chaincodes:
-  - name: "basic_asset"
-    path: "./chaincode/basic_asset" 
+  - name: "cc_basic_asset"
+    path: "./chaincode/cc_basic_asset"
     channel: "channel-all"
     lang: "go"                       
     version: "1.0"
     sequence: 1
     port: 9999                        # porta CCAAS do container
-    endorsement_policy: "AND('Org1MSP.member', 'Org2MSP.member', 'Org3MSP.member', 'Org4MSP.member')"
+    endorsement_policy: "OR('Org1MSP.member', 'Org2MSP.member', 'Org3MSP.member', 'Org4MSP.member')"
     pdc: 
       - name: "collectionPrivate"
         policy: "OR('Org1MSP.member')"

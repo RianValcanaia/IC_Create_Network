@@ -1,16 +1,15 @@
 #!/bin/bash
 # Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
+
 # Verifica se os pré-requisitos do sistema (Docker, Go, binários do Fabric) estão instalados 
 #e em versões compatíveis. Caso necessário, realiza o download automático dos binários do Hyperledger Fabric.
 
 source $(dirname "$0")/utils.sh
 
-# Define o diretório raiz do projeto
-# Se NETWORK_DIR vier do Python, usamos o pai dele como raiz, ou o diretório atual
-PROJECT_ROOT=${NETWORK_DIR%/network} # remove '/network' do final para pegar a raiz
-if [ -z "$PROJECT_ROOT" ]; then
-    PROJECT_ROOT="."
-fi
+# Define o diretório raiz do projeto (Definitivo/) a partir da localização
+# deste script — independe de NETWORK_DIR, que no layout multi-rede é
+# network/<pasta> (não dá mais para inferir a raiz removendo o sufixo "/network").
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # adiciona ./bin local ao PATH temporariamente para verificação
 export PATH="$PROJECT_ROOT/bin:$PATH"

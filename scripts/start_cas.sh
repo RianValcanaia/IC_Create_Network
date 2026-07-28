@@ -1,5 +1,6 @@
 #!/bin/bash
 # Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
+
 # Script responsável por criar a rede Docker e iniciar os containers das Autoridades Certificadoras (CAs), além de corrigir permissões de pastas geradas pelo Docker.
 
 source $(dirname "$0")/utils.sh
@@ -9,7 +10,7 @@ if [ -z "$NETWORK_DIR" ]; then
     NETWORK_DIR="$(cd "$(dirname "$0")/../network" && pwd)"
 fi
 
-COMPOSE_FILE="$NETWORK_DIR/compose/compose-ca.yaml"
+COMPOSE_FILE="${COMPOSE_FILE:-$NETWORK_DIR/compose/compose-ca.yaml}"
 
 # verificacao de seguranca
 if [ ! -f "$COMPOSE_FILE" ]; then
@@ -20,8 +21,22 @@ fi
 
 # criar a network, como este eh o primeiro docker-compose criamos aqui mesmo
 NETWORK_BASE=${NETWORK_NAME:-$(yq -r '.network.name' "$NETWORK_DIR/../project_config/network.yaml")}
-infoln "Criando a network ${NETWORK_BASE}_net"
-docker network create "${NETWORK_BASE}_net" || true
+DOCKER_NET="${NETWORK_BASE}_net"
+# NETWORK_SUBNET (do YAML, via orquestrador) fixa a sub-rede -> IPs estáticos.
+# Se a rede já existir com sub-rede diferente, recria (sem containers, é seguro).
+if docker network inspect "$DOCKER_NET" >/dev/null 2>&1; then
+    CUR_SUBNET=$(docker network inspect "$DOCKER_NET" --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}')
+    if [ -n "${NETWORK_SUBNET:-}" ] && [ "$CUR_SUBNET" != "$NETWORK_SUBNET" ]; then
+        infoln "Recriando a network $DOCKER_NET (subnet $CUR_SUBNET -> $NETWORK_SUBNET)"
+        docker network rm "$DOCKER_NET" >/dev/null 2>&1 || true
+        docker network create ${NETWORK_SUBNET:+--subnet "$NETWORK_SUBNET"} "$DOCKER_NET"
+    else
+        infoln "Network $DOCKER_NET já existe (subnet: ${CUR_SUBNET:-auto})"
+    fi
+else
+    infoln "Criando a network $DOCKER_NET${NETWORK_SUBNET:+ (subnet $NETWORK_SUBNET)}"
+    docker network create ${NETWORK_SUBNET:+--subnet "$NETWORK_SUBNET"} "$DOCKER_NET"
+fi
 
 # executa o docker compose
 infoln "Subindo containers..."

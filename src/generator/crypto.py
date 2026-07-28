@@ -1,22 +1,45 @@
 # Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
 """
-Gera o script register_enroll.sh, que automatiza a criação de identidades 
-digitais na rede. Ele gerencia o processo de bootstrap do administrador da CA, 
-o registro e a matrícula (enrollment) de peers, usuários e administradores de 
+Gera o script register_enroll.sh, que automatiza a criação de identidades
+digitais na rede. Ele gerencia o processo de bootstrap do administrador da CA,
+o registro e a matrícula (enrollment) de peers, usuários e administradores de
 organizações utilizando o fabric-ca-client.
+
+Suporte a deploy distribuído:
+  Quando a seção 'machines' está definida no network.yaml e cada CA possui o
+  campo 'machine', as URLs do fabric-ca-client são geradas com os IPs reais de
+  cada CA em vez de 'localhost'. Isso permite executar register_enroll.sh de
+  qualquer máquina do cluster que enxergue a LAN. Sem 'machines', o
+  comportamento é idêntico ao original (localhost).
 """
 import os
 import stat
 from ..utils import Colors as co
 
 class CryptoGenerator:
-    def __init__(self, config, paths):
-        # inicializa as referencias de configuracao 
+    def __init__(self, config, paths, distributed=False):
+        # inicializa as referencias de configuracao
         self.config = config
         self.paths = paths
-        
+
+        # quando True, usa os IPs reais da seção 'machines' do network.yaml;
+        # quando False (padrão / modo local), todos os endereços usam 'localhost'.
+        self.distributed = distributed
+
         # local de saida do script register_enroll.sh
         self.script_saida = self.paths.scripts_dir / "register_enroll.sh"
+
+    def _ca_host(self, ca_config, machines):
+        """
+        Retorna o host (IP ou 'localhost') de uma CA para uso nas URLs do
+        fabric-ca-client. Em modo local (ou sem 'machine' na CA), retorna
+        'localhost'. Em modo distribuído, retorna o IP real da máquina que
+        hospeda a CA.
+        """
+        machine_name = ca_config.get('machine')
+        if machine_name and machine_name in machines:
+            return machines[machine_name]['ip']
+        return "localhost"
 
     # gera o conteudo do script bash para registro e matricula das identidades
     def generate(self):
@@ -24,7 +47,11 @@ class CryptoGenerator:
         orgs = self.config['network_topology']['organizations']
         orderer_conf = self.config['network_topology']['orderer']
         domain = self.config['network_topology']['network']['domain']
-        
+
+        # em modo local (distributed=False), machines fica vazio e todos os
+        # endereços caem no fallback 'localhost' dos helpers.
+        machines = self.config['network_topology'].get('machines', {}) if self.distributed else {}
+
         linhas = []
         
         # -------------------- Configuracao inicial do script bash --------------------
@@ -53,36 +80,42 @@ command -v fabric-ca-client >/dev/null || {
             org_name = org['name']
             ca_port = org['ca']['port']
             ca_name = org['ca']['name']
-            
+
+            # host da CA desta org: IP real em modo distribuído, localhost em modo local
+            ca_host = self._ca_host(org['ca'], machines)
+            ca_url = f"http://{ca_host}:{ca_port}"
+
             # define o diretorio base da organizacao e a home temporaria do cliente CA
             org_base_dir = f"{self.paths.network_dir}/organizations/peerOrganizations/{org_name}.{domain}"
             ca_client_home = f"{self.paths.network_dir}/organizations/fabric-ca/{org_name}/client"
 
-            linhas.append(f"\n# --- Organização: {org_name} ---")
+            linhas.append(f"\n# --- Organização: {org_name} (CA em {ca_host}:{ca_port}) ---")
             linhas.append(f"infoln 'Processando Organização: {org_name}'")
-            
+
             linhas.append(f"mkdir -p {org_base_dir}")
             linhas.append(f"mkdir -p {ca_client_home}")
-            
+
             # define o ambiente de trabalho do CA client para a org
             linhas.append(f"export FABRIC_CA_CLIENT_HOME={ca_client_home}")
-            linhas.append(f"infoln 'Bootstrap Admin CA ({org_name})...'")
+            linhas.append(f"infoln 'Bootstrap Admin CA ({org_name} em {ca_host}:{ca_port})...'")
 
             # realiza o enroll do ademir da CA para permitir registro de novos nos
-            linhas.append(f"fabric-ca-client enroll -u http://admin:adminpw@localhost:{ca_port} --caname {ca_name}")
+            linhas.append(f"fabric-ca-client enroll -u http://admin:adminpw@{ca_host}:{ca_port} --caname {ca_name}")
 
             # registra e matricula peers
             for peer in org['peers']:
                 p_name = peer['name']
                 p_full = f"{p_name}.{org_name}.{domain}"
                 p_pass = f"{p_name}pw"
-                # chamada da funcao bash definida
-                linhas.append(f"registerAndEnrollPeer '{p_name}' '{p_pass}' 'http://localhost:{ca_port}' '{ca_name}' '{p_full}' '{org_base_dir}'")
+                peer_machine = peer.get('machine')
+                peer_ip = machines.get(peer_machine, {}).get('ip', '') if peer_machine else ''
+                # chamada da funcao bash definida (7º arg: IP real do peer p/ TLS SAN)
+                linhas.append(f"registerAndEnrollPeer '{p_name}' '{p_pass}' '{ca_url}' '{ca_name}' '{p_full}' '{org_base_dir}' '{peer_ip}'")
 
             # registra e matricula ademir da org
             admin_name = f"{org_name}admin"
             admin_pass = f"{org_name}adminpw"
-            linhas.append(f"registerAndEnrollOrgAdmin '{admin_name}' '{admin_pass}' 'http://localhost:{ca_port}' '{ca_name}' '{org_base_dir}' 'Admin@{org_name}.{domain}'")
+            linhas.append(f"registerAndEnrollOrgAdmin '{admin_name}' '{admin_pass}' '{ca_url}' '{ca_name}' '{org_base_dir}' 'Admin@{org_name}.{domain}'")
 
             # finaliz MSP da org, copia certs 
             linhas.append(f"finishOrgMSP '{org_base_dir}' '{org_base_dir}/users/Admin@{org_name}.{domain}/msp'")
@@ -92,33 +125,39 @@ command -v fabric-ca-client >/dev/null || {
         # tenta pegar config de CA do orderer, se não existir, define padrões
         ord_ca_conf = orderer_conf.get('ca', {})
         ord_ca_name = ord_ca_conf.get('name', 'ca-orderer')
-        ord_ca_port = ord_ca_conf.get('port', 7054) 
-        
+        ord_ca_port = ord_ca_conf.get('port', 7054)
+
+        # host da CA do orderer: IP real em modo distribuído, localhost em modo local
+        ord_ca_host = self._ca_host(ord_ca_conf, machines)
+        ord_ca_url = f"http://{ord_ca_host}:{ord_ca_port}"
+
         # define home do client da CA do Orderer
         ord_ca_client_home = f"{self.paths.network_dir}/organizations/fabric-ca/ordererOrg/client"
         ord_base_dir = f"{self.paths.network_dir}/organizations/ordererOrganizations/{domain}"
 
-        linhas.append(f"\n# --- Organização Orderer ({domain}) ---")
-        linhas.append(f"infoln 'Processando Orderer Org (CA: {ord_ca_name}:{ord_ca_port})'")
-        
+        linhas.append(f"\n# --- Organização Orderer ({domain}, CA em {ord_ca_host}:{ord_ca_port}) ---")
+        linhas.append(f"infoln 'Processando Orderer Org (CA: {ord_ca_name} em {ord_ca_host}:{ord_ca_port})'")
+
         linhas.append(f"mkdir -p {ord_base_dir}")
         linhas.append(f"mkdir -p {ord_ca_client_home}")
         linhas.append(f"export FABRIC_CA_CLIENT_HOME={ord_ca_client_home}")
 
         # realiza o enroll do ademir da CA do order
-        linhas.append(f"infoln 'Bootstrap Admin CA Orderer...'")
-        linhas.append(f"fabric-ca-client enroll -u http://admin:adminpw@localhost:{ord_ca_port} --caname {ord_ca_name}")
+        linhas.append(f"infoln 'Bootstrap Admin CA Orderer ({ord_ca_host}:{ord_ca_port})...'")
+        linhas.append(f"fabric-ca-client enroll -u http://admin:adminpw@{ord_ca_host}:{ord_ca_port} --caname {ord_ca_name}")
 
         # registra e matricula cada no do orderer
         for node in orderer_conf['nodes']:
             o_name = node['name']
             o_pass = f"{o_name}pw"
             o_full = f"{o_name}.{domain}"
-            # chamada da funcao bash modular para orderer
-            linhas.append(f"registerAndEnrollOrdererNode '{o_name}' '{o_pass}' 'http://localhost:{ord_ca_port}' '{ord_ca_name}' '{o_full}' '{ord_base_dir}'")
+            node_machine = node.get('machine')
+            node_ip = machines.get(node_machine, {}).get('ip', '') if node_machine else ''
+            # chamada da funcao bash modular para orderer (7º arg: IP real p/ TLS SAN)
+            linhas.append(f"registerAndEnrollOrdererNode '{o_name}' '{o_pass}' '{ord_ca_url}' '{ord_ca_name}' '{o_full}' '{ord_base_dir}' '{node_ip}'")
 
         # registra e matricula o admir do servico de ordenacao
-        linhas.append(f"registerAndEnrollOrgAdmin 'ordererAdmin' 'ordererAdminpw' 'http://localhost:{ord_ca_port}' '{ord_ca_name}' '{ord_base_dir}' 'Admin@{domain}'")
+        linhas.append(f"registerAndEnrollOrgAdmin 'ordererAdmin' 'ordererAdminpw' '{ord_ca_url}' '{ord_ca_name}' '{ord_base_dir}' 'Admin@{domain}'")
 
         # finaliza o MSP do orderer
         linhas.append(f"finishOrgMSP '{ord_base_dir}' '{ord_base_dir}/users/Admin@{domain}/msp'")
@@ -176,16 +215,22 @@ function enrollTLS() {
     local user=$4
     local pass=$5
     local hostname=$6
+    local ip=${7:-}   # IP real do nó — opcional, usado em modo distribuído para IP SANs
 
     infoln "[TLS] Gerando certificados para $hostname"
-    
-    # enroll com perfil TLS 
+
+    # monta os --csr.hosts: sempre hostname + localhost; adiciona IP se fornecido
+    local csr_hosts="--csr.hosts ${hostname} --csr.hosts localhost"
+    if [ -n "$ip" ]; then
+        csr_hosts="$csr_hosts --csr.hosts ${ip}"
+    fi
+
+    # enroll com perfil TLS
     fabric-ca-client enroll -u ${url} \\
         --caname "${ca_name}" \\
         -M "${tls_dir}" \\
         --enrollment.profile tls \\
-        --csr.hosts "${hostname}" \\
-        --csr.hosts localhost
+        ${csr_hosts}
 
     # organiza arquivos para o padrao fabric
     cp "${tls_dir}/tlscacerts/"* "${tls_dir}/ca.crt"
@@ -203,7 +248,8 @@ function registerAndEnrollPeer() {
     local ca_name=$4
     local hostname=$5
     local base_dir=$6
-    
+    local ip=${7:-}   # IP real do nó — opcional, para IP SANs no certificado TLS
+
     infoln "Configurando Peer: ${name}"
 
     # Register 
@@ -223,7 +269,7 @@ function registerAndEnrollPeer() {
 
     # Enroll TLS
     local tls_dir="${base_dir}/peers/${hostname}/tls"
-    enrollTLS "${url//:\\/\\//://${name}:${secret}@}" "${ca_name}" "${tls_dir}" "${name}" "${secret}" "${hostname}"
+    enrollTLS "${url//:\\/\\//://${name}:${secret}@}" "${ca_name}" "${tls_dir}" "${name}" "${secret}" "${hostname}" "${ip}"
 }
 
 # registra e faz enroll de um orderer
@@ -234,7 +280,8 @@ function registerAndEnrollOrdererNode() {
     local ca_name=$4
     local hostname=$5
     local base_dir=$6
-    
+    local ip=${7:-}   # IP real do nó — opcional, para IP SANs no certificado TLS
+
     infoln "Configurando Orderer Node: ${name}"
 
     # Register
@@ -254,7 +301,7 @@ function registerAndEnrollOrdererNode() {
 
     # Enroll TLS
     local tls_dir="${base_dir}/orderers/${hostname}/tls"
-    enrollTLS "${url//:\\/\\//://${name}:${secret}@}" "${ca_name}" "${tls_dir}" "${name}" "${secret}" "${hostname}"
+    enrollTLS "${url//:\\/\\//://${name}:${secret}@}" "${ca_name}" "${tls_dir}" "${name}" "${secret}" "${hostname}" "${ip}"
 }
 
 # registra e faz enroll de um admin de Organização

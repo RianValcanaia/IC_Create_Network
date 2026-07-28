@@ -21,13 +21,12 @@ class ConfigLoader:
 
     # faz a leitura dos arquivos e convertem em objetos python
     def load(self):
-        # 1. carrega o arquivo da topologia da rede 
+        # carrega o arquivo da topologia da rede 
         with open(self.network_config_path, 'r') as f:
             # yaml.safe_load transforma o texto do yaml em um dict python
             self.full_config['network_topology'] = yaml.safe_load(f)
         
-        # 2. carrega as versões do ambiente    
-        # verifica se o arquivo versions.yaml existe
+        # carrega as versões do ambiente    
         if os.path.exists(self.versions_config_path):
             with open(self.versions_config_path, 'r') as f:
                 # armazena as definicoes de versoes 

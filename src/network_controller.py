@@ -28,7 +28,8 @@ class NetworkController:
             self.log_dir = Path(self.paths.network_dir) / "logs"
             self.log_dir.mkdir(parents=True, exist_ok=True)
 
-    
+
+    # prepara as variaveis de ambiente que os scripts bash vao precisar
     def _get_env_vars(self):
         """
         metodo privado que prepara as variaveis de ambiente 
@@ -50,10 +51,13 @@ class NetworkController:
             "GO_VERSION": versions['go'],
             "DOCKER_IMAGE_PREFIX": images['org_hyperledger'],
             "NETWORK_NAME": network_name,
+            "NETWORK_FOLDER": self.config['network_topology']['network'].get('folder', network_name),
+            "NETWORK_SUBNET": self.config['network_topology']['network'].get('subnet', ''),
             "NETWORK_CONFIG": str(self.paths.network_yaml),
             "PATH": f"{project_bin_path}:{system_path}"
         }
 
+    # executa um script bash com as variaveis de ambiente preparadas
     def run_script(self, script_name, extra_env=None):
         """
         Executa um script bash localizado na pasta de scripts
@@ -101,6 +105,7 @@ class NetworkController:
             except subprocess.CalledProcessError as e:
                 co.errorln(f"Erro ao executar {script_name}: {e}")
                 raise
-
+                
+          
     def prepare_environment(self):
         self.paths.ensure_network_dirs()
