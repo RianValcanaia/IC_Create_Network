@@ -8,18 +8,85 @@ necessárias para rodar as Autoridades Certificadoras
 
 Rever: futuramente ver a TLS ativa para os CAs e a interface de operações.
 """
+import ipaddress
 import json
 import os
 import yaml
 import shutil
 from ..utils import Colors as co
 
+# Offsets dos IPs estáticos dentro da subnet da rede (deterministicos):
+# .5+ CAs | .10+ orderers | .20+ peers | .30+ chaincodes (ver deploy.py)
+IP_OFFSET_CA = 5
+IP_OFFSET_ORDERER = 10
+IP_OFFSET_PEER = 20
+
 class ComposeGenerator:
-    def __init__(self, config, paths):
+    def __init__(self, config, paths, machine=None):
         # inicia com a caminhos e config da rede
         self.config = config
         self.paths = paths
         self.compose_dir = self.paths.network_dir / "compose"
+
+        # nome da máquina local para deploy distribuído (None = modo local completo,
+        # gera todos os serviços; com valor, filtra só o que pertence a essa máquina)
+        self.machine = machine
+
+        # isolamento entre redes coexistentes na mesma máquina:
+        # - folder: sufixo p/ nomes de container que não são únicos por si (CAs)
+        # - subnet: sub-rede fixa da docker network -> IPs estáticos por serviço
+        net = self.config['network_topology']['network']
+        self.folder = net.get('folder', net['name'])
+        self.subnet = net.get('subnet')
+        self._net_base = ipaddress.ip_network(self.subnet)[0] if self.subnet else None
+
+    def _static_ip(self, offset):
+        """IP estático determinístico dentro da subnet (None sem subnet no YAML)"""
+        if self._net_base is None:
+            return None
+        return str(self._net_base + offset)
+
+    def _service_networks(self, network_name, offset):
+        """Bloco 'networks' do serviço: com subnet vira dict com ipv4_address fixo"""
+        ip = self._static_ip(offset)
+        if ip:
+            return {network_name: {'ipv4_address': ip}}
+        return [network_name]
+
+    def _build_extra_hosts(self):
+        """
+        Retorna um dict {hostname: ip} para todos os nós cujo campo `machine`
+        aponta para uma máquina diferente da local. Usado para injetar entradas
+        no /etc/hosts dos containers, permitindo conectividade entre máquinas
+        distintas na mesma LAN (deploy distribuído via --machine).
+        """
+        machines = self.config['network_topology'].get('machines', {})
+        domain = self.config['network_topology']['network']['domain']
+        orgs = self.config['network_topology']['organizations']
+        orderer_conf = self.config['network_topology']['orderer']
+
+        extra_hosts = {}
+
+        for node in orderer_conf['nodes']:
+            node_machine = node.get('machine')
+            if node_machine and node_machine != self.machine and node_machine in machines:
+                extra_hosts[f"{node['name']}.{domain}"] = machines[node_machine]['ip']
+
+        for org in orgs:
+            for peer in org['peers']:
+                peer_machine = peer.get('machine')
+                if peer_machine and peer_machine != self.machine and peer_machine in machines:
+                    extra_hosts[f"{peer['name']}.{org['name']}.{domain}"] = machines[peer_machine]['ip']
+
+        # chaincodes CCAAS: peers precisam resolver o hostname do container chaincode
+        # mesmo que ele esteja em outra máquina
+        for cc in self.config['network_topology'].get('chaincodes', []):
+            cc_machine = cc.get('machine')
+            if cc_machine and cc_machine != self.machine and cc_machine in machines:
+                cc_hostname = f"{cc['name']}.{cc['channel']}"
+                extra_hosts[cc_hostname] = machines[cc_machine]['ip']
+
+        return extra_hosts
 
     # gera o arquivo que sobe todas as CAs da rede
     def generate_ca_compose(self):   
@@ -33,20 +100,29 @@ class ComposeGenerator:
         network_name = self.config['network_topology']['network']['name']
 
         # cria a CA de cada Org de peers
-        for org in orgs:
+        for ca_idx, org in enumerate(orgs):
             ca_config = org['ca']
+            # em modo distribuído, inclui apenas CAs atribuídas a esta máquina
+            # (o índice ca_idx é preservado sobre a lista completa para manter
+            # o IP estático determinístico mesmo quando filtrado)
+            if self.machine and ca_config.get('machine') != self.machine:
+                continue
+
             org_name = org['name']
             service_name = ca_config['name']
+            # sufixo da rede: nomes de CA como 'ca-org1' se repetem entre topologias
+            # e o container_name é global no host docker (colisão entre redes coexistentes)
+            container_name = f"{service_name}-{self.folder}"
             port = ca_config['port']
-            
+
             # caminho interno do container onde a CA guarda seus dados
             ca_server_home = "/etc/hyperledger/fabric-ca-server"
-            
+
             # define o docker para a CA
             services[service_name] = {
                 'image': f"{img_prefix}/fabric-ca:{ca_version}",
                 'labels': {'service': "hyperledger-fabric-ca"},
-                'container_name': service_name,
+                'container_name': container_name,
                 'environment': [
                     f"FABRIC_CA_HOME={ca_server_home}",
                     f"FABRIC_CA_SERVER_CA_NAME={service_name}",
@@ -60,7 +136,7 @@ class ComposeGenerator:
                 'volumes': [
                     f"../organizations/fabric-ca/{org_name}:{ca_server_home}"
                 ],
-                'networks': [network_name]
+                'networks': self._service_networks(network_name, IP_OFFSET_CA + ca_idx)
             }
 
         # CA do orderer
@@ -68,27 +144,29 @@ class ComposeGenerator:
         ord_ca = orderer_conf.get('ca', {})
         ord_ca_name = ord_ca.get('name', 'ca-orderer')
         ord_ca_port = ord_ca.get('port', 7054)
-        ord_org_folder = "ordererOrg" 
-        
-        services[ord_ca_name] = {
-            'image': f"{img_prefix}/fabric-ca:{ca_version}",
-            'labels': {'service': "hyperledger-fabric-ca"},
-            'container_name': ord_ca_name,
-            'environment': [
-                f"FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server",
-                f"FABRIC_CA_SERVER_CA_NAME={ord_ca_name}",
-                "FABRIC_CA_SERVER_TLS_ENABLED=false",
-                f"FABRIC_CA_SERVER_PORT={ord_ca_port}",
-                f"FABRIC_CA_SERVER_CSR_CN={ord_ca_name}",
-                "FABRIC_CA_SERVER_CSR_HOSTS=0.0.0.0",
-            ],
-            'ports': [f"{ord_ca_port}:{ord_ca_port}"],
-            'command': "sh -c 'fabric-ca-server start -b admin:adminpw -d'",
-            'volumes': [
-                f"../organizations/fabric-ca/{ord_org_folder}:/etc/hyperledger/fabric-ca-server"
-            ],
-            'networks': [network_name]
-        }
+        ord_org_folder = "ordererOrg"
+
+        # em modo distribuído, inclui apenas se a CA do orderer pertence a esta máquina
+        if not self.machine or ord_ca.get('machine') == self.machine:
+            services[ord_ca_name] = {
+                'image': f"{img_prefix}/fabric-ca:{ca_version}",
+                'labels': {'service': "hyperledger-fabric-ca"},
+                'container_name': f"{ord_ca_name}-{self.folder}",
+                'environment': [
+                    f"FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server",
+                    f"FABRIC_CA_SERVER_CA_NAME={ord_ca_name}",
+                    "FABRIC_CA_SERVER_TLS_ENABLED=false",
+                    f"FABRIC_CA_SERVER_PORT={ord_ca_port}",
+                    f"FABRIC_CA_SERVER_CSR_CN={ord_ca_name}",
+                    "FABRIC_CA_SERVER_CSR_HOSTS=0.0.0.0",
+                ],
+                'ports': [f"{ord_ca_port}:{ord_ca_port}"],
+                'command': "sh -c 'fabric-ca-server start -b admin:adminpw -d'",
+                'volumes': [
+                    f"../organizations/fabric-ca/{ord_org_folder}:/etc/hyperledger/fabric-ca-server"
+                ],
+                'networks': self._service_networks(network_name, IP_OFFSET_CA + len(orgs))
+            }
 
         # estrutura final do compose para as CAs
         compose_content = {
@@ -103,13 +181,15 @@ class ComposeGenerator:
 
         # garante que o diretório de saída existe
         self.compose_dir.mkdir(parents=True, exist_ok=True)
-        output_path = self.compose_dir / "compose-ca.yaml"
-        
+        filename = f"compose-ca-{self.machine}.yaml" if self.machine else "compose-ca.yaml"
+        output_path = self.compose_dir / filename
+
         # salva o arquivo YAML
         with open(output_path, 'w') as f:
             yaml.dump(compose_content, f, sort_keys=False)
-            
+
         co.successln(f"Arquivo gerado: {output_path}")
+        return output_path
 
     # Gera o arquivo que sobe peers, orderers e prepara o peercfg
     def generate_nodes_compose(self):
@@ -133,10 +213,18 @@ class ComposeGenerator:
         img_prefix = self.config['env_versions']['images']['org_hyperledger']
         fabric_version = self.config['env_versions']['versions']['fabric']
 
+        # extra_hosts para conectividade entre máquinas (vazio em modo local)
+        extra_hosts = self._build_extra_hosts() if self.machine else {}
+
         # configuracao dos nos orderers
-        for node in orderer_conf['nodes']:
+        for ord_idx, node in enumerate(orderer_conf['nodes']):
+            # em modo distribuído, inclui apenas orderers desta máquina
+            # (ord_idx preservado sobre a lista completa para manter o IP estático)
+            if self.machine and node.get('machine') != self.machine:
+                continue
+
             full_name = f"{node['name']}.{domain}"
-            services[full_name] = {
+            orderer_svc = {
                 'container_name': full_name,
                 'image': f"{img_prefix}/fabric-orderer:{fabric_version}",
                 'labels': {'service': 'hyperledger-fabric'},
@@ -171,15 +259,28 @@ class ComposeGenerator:
                     f"{node['port']}:{node['port']}",
                     f"{node['admin_port']}:{node['admin_port']}"
                 ],
-                'networks': [network_name]
+                'networks': self._service_networks(network_name, IP_OFFSET_ORDERER + ord_idx)
             }
+            if extra_hosts:
+                orderer_svc['extra_hosts'] = [f"{host}:{ip}" for host, ip in extra_hosts.items()]
+            services[full_name] = orderer_svc
 
         # configuracao dos nos peers
+        peer_global_idx = 0
         for org in orgs:
             # lista de enderecos de todos os peers desta organizacao
             peer_addresses = [f"{p['name']}.{org['name']}.{domain}:{p['port']}" for p in org['peers']]
 
             for idx, peer in enumerate(org['peers']):
+                # índice global preservado sobre a lista completa (mesmo quando
+                # filtrado por máquina) para manter o IP estático determinístico
+                this_peer_idx = peer_global_idx
+                peer_global_idx += 1
+
+                # em modo distribuído, inclui apenas peers desta máquina
+                if self.machine and peer.get('machine') != self.machine:
+                    continue
+
                 p_full = f"{peer['name']}.{org['name']}.{domain}"
 
                 # configura o gossip bootstrap, um peer aponta para o proximo em "anel"
@@ -188,7 +289,7 @@ class ComposeGenerator:
                 else:
                     bootstrap_peer = peer_addresses[0]
 
-                services[p_full] = {
+                peer_svc = {
                     'container_name': p_full,
                     'image': f"{img_prefix}/fabric-peer:{fabric_version}",
                     'labels': {'service': 'hyperledger-fabric'},
@@ -214,13 +315,16 @@ class ComposeGenerator:
                         "./peercfg:/etc/hyperledger/peercfg", 
                         f"../organizations/peerOrganizations/{org['name']}.{domain}/peers/{p_full}:/etc/hyperledger/fabric",
                         f"{p_full}:/var/hyperledger/production",
-                        f"../../builders/ccaas:/opt/hyperledger/ccaas_builder"  # builder necessario para o modelo CCAAS
+                        f"../../../builders/ccaas:/opt/hyperledger/ccaas_builder"  # builder necessario para o modelo CCAAS (compose fica em network/<rede>/compose)
                     ],
                     'ports': [f"{peer['port']}:{peer['port']}"],
-                    'networks': [network_name], 
+                    'networks': self._service_networks(network_name, IP_OFFSET_PEER + this_peer_idx),
                     'command': 'peer node start'
                 }
-    
+                if extra_hosts:
+                    peer_svc['extra_hosts'] = [f"{host}:{ip}" for host, ip in extra_hosts.items()]
+                services[p_full] = peer_svc
+
         # composição final
         compose_dict = {
             'version': '3.7',
@@ -233,10 +337,12 @@ class ComposeGenerator:
         }
         
         # salva o arquivo
-        output_path = self.compose_dir / "compose-nodes.yaml"
+        filename = f"compose-nodes-{self.machine}.yaml" if self.machine else "compose-nodes.yaml"
+        output_path = self.compose_dir / filename
         with open(output_path, 'w') as f:
             yaml.dump(compose_dict, f, sort_keys=False)
         co.successln(f"Arquivo de nós gerado: {output_path}")
+        return output_path
         
     # gera os arquivos json de perfil de conecao (CCP) usados pelos SDKs como node.js
     def generate_connection_profiles(self):

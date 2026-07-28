@@ -1,5 +1,6 @@
 #!/bin/bash
 # Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
+
 # Contém funções auxiliares em shell script para exibição de mensagens coloridas e remoção segura de arquivos.
 
 # Cores ANSI

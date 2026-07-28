@@ -8,6 +8,7 @@ realmente foi definida). Também aplica valores padrão (defaults) onde permitid
 
 Rever: valida_chaincode
 """
+import ipaddress
 import os
 from .utils import Colors as co
 
@@ -34,8 +35,9 @@ class ConfigParser:
         self._valida_secao_network()
         self._valida_organizacoes() 
         self._valida_orderer()
-        self._valida_canais()       
-        self._valida_chaincodes()   
+        self._valida_canais()
+        self._valida_chaincodes()
+        self._valida_machines()
 
         return self._print_results()
 
@@ -56,6 +58,7 @@ class ConfigParser:
         co.successln("Validação concluída com sucesso. Nenhum erro encontrado.")
         return True
 
+    # validadores genéricos
     def _chaves_obrigatorias(self, dado, chaves_obrigatorias, contexto):
         """
         Utilitario para garantir que campos essenciais existam no yaml
@@ -71,13 +74,15 @@ class ConfigParser:
         return True
 
     # ---------------------- Validadores Específicos -------------------------
+    # valida a existencia das chaves obrigatorias na raiz do yaml
     def _valida_chaves_raizes(self):
         """
         Verifica se o yaml tem as colunas principais: network, organizations e orderer
         """
         obrigatorios = ['network', 'organizations', 'orderer']
         self._chaves_obrigatorias(self.topologia, obrigatorios, "Raiz do network.yaml")
-        
+
+    # valida a seção network (nome, dominio, sub-rede)    
     def _valida_secao_network(self):
         """
         Verifica nome e dominio da rede (nao podem ter espacos)
@@ -87,6 +92,18 @@ class ConfigParser:
             if ' ' in net['domain']:
                 self.erros.append(f"Network Domain '{net['domain']}' não deve conter espaços.")
 
+            # 'folder' opcional: pasta que isola os artefatos desta rede em network/<folder>
+            if 'folder' in net and ' ' in str(net['folder']):
+                self.erros.append(f"Network Folder '{net['folder']}' não deve conter espaços.")
+
+            # 'subnet' opcional: sub-rede Docker fixa -> IPs estáticos para CAs/orderers/peers/chaincodes
+            if 'subnet' in net:
+                try:
+                    ipaddress.ip_network(net['subnet'])
+                except ValueError:
+                    self.erros.append(f"Network Subnet '{net['subnet']}' não é uma sub-rede CIDR válida (ex: '172.20.0.0/16').")
+
+    # valida a seção organizations (orgs, CAs e Peers)
     def _valida_organizacoes(self):
         """
         Valida orgs, CAs e Peers, sao aplicados defaults onde permitido
@@ -151,6 +168,7 @@ class ConfigParser:
                 else:
                     self.erros.append(f"{contexto_peer}: state_db inválido ('{dp_tipo}'). Use 'CouchDB' ou 'GoLevelDB'.")
 
+    # valida a seção orderer (tipo de consenso, nós, tamanho de bloco)
     def _valida_orderer(self):
         """
         Valida o servico de ordenacao, consenso (Raft/BFT) e tamanho de bloco.
@@ -214,7 +232,7 @@ class ConfigParser:
         if not c_all:
             self.erros.append("Nenhum canal definido contém todas as organizações. É necessário ter pelo menos um canal com todas as orgs para bootstrap inicial.")       
 
-    # valida a seção chaincodes, ainda não validando isso, futuramente preciso ver isso
+    # valida a seção chaincodes
     def _valida_chaincodes(self):
         ccs = self.topologia.get('chaincodes', [])
         channels = self.topologia.get('channels', [])
@@ -237,3 +255,45 @@ class ConfigParser:
                     else:
                         for pdc in cc['pdc']:
                             self._chaves_obrigatorias(pdc, ['name', 'policy', 'required_peer_count', 'max_peer_count', 'block_to_live', 'member_only_read', 'member_only_write'], f"PDC do chaincode {cc['name']}")
+
+    # valida a seção opcional 'machines' (deploy distribuído multi-máquina)
+    def _valida_machines(self):
+        machines = self.topologia.get('machines')
+        if not machines:
+            return  # seção opcional: ausente = modo local, nada a validar
+
+        if not isinstance(machines, dict):
+            self.erros.append("A seção 'machines' deve ser um mapa {nome_da_maquina: {...}}.")
+            return
+
+        coordinators = 0
+        for name, m in machines.items():
+            if not self._chaves_obrigatorias(m, ['ip'], f"máquina '{name}' em 'machines'"):
+                continue
+            if m.get('coordinator'):
+                coordinators += 1
+
+        if coordinators > 1:
+            self.erros.append(
+                "Mais de uma máquina marcada como 'coordinator: true' em 'machines'. "
+                "Deve haver exatamente uma (necessária para --slurm-deploy)."
+            )
+
+        # valida que todo campo 'machine' referenciado (orgs/peers/orderer/chaincodes)
+        # existe de fato em 'machines'
+        def _valida_ref(machine_name, contexto):
+            if machine_name and machine_name not in machines:
+                self.erros.append(f"{contexto} referencia a máquina '{machine_name}', que não foi definida em 'machines'.")
+
+        for org in self.topologia.get('organizations', []):
+            _valida_ref(org.get('ca', {}).get('machine'), f"CA da organização '{org.get('name')}'")
+            for peer in org.get('peers', []):
+                _valida_ref(peer.get('machine'), f"Peer '{peer.get('name')}' da organização '{org.get('name')}'")
+
+        ord_secao = self.topologia.get('orderer', {})
+        _valida_ref(ord_secao.get('ca', {}).get('machine'), "CA do Orderer")
+        for node in ord_secao.get('nodes', []):
+            _valida_ref(node.get('machine'), f"Orderer node '{node.get('name')}'")
+
+        for cc in self.topologia.get('chaincodes', []):
+            _valida_ref(cc.get('machine'), f"Chaincode '{cc.get('name')}'")

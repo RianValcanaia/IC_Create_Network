@@ -16,7 +16,7 @@ class Colors:
 
     @staticmethod
     def headerln(msg: str):
-        print(f"{Colors.BLUE}[INFO] === {msg.upper()} ==={Colors.RESET}")
+        print(f"{Colors.BLUE}[INFO - Header] === {msg.upper()} ==={Colors.RESET}")
 
     @staticmethod
     def infoln(msg: str):
@@ -24,7 +24,7 @@ class Colors:
 
     @staticmethod
     def actionln(msg: str):
-        print(f"{Colors.BLUE}[INFO] > {msg}{Colors.RESET}")
+        print(f"{Colors.BLUE}[INFO - Action] > {msg}{Colors.RESET}")
 
     @staticmethod
     def successln(msg: str):

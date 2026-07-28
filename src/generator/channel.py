@@ -1,29 +1,65 @@
 # Copyright (c) 2026 Rian Carlos Valcanaia - Licensed under MIT License
 """
-Responsável pela orquestração da entrada dos nós nos canais 
-através do script create_channel.sh. Ele automatiza o uso do 
-osnadmin para o join dos Orderers e do comando peer channel 
+Responsável pela orquestração da entrada dos nós nos canais
+através do script create_channel.sh. Ele automatiza o uso do
+osnadmin para o join dos Orderers e do comando peer channel
 join para que os Peers participem dos canais definidos na topologia.
+
+Suporte a deploy distribuído:
+  Quando a seção 'machines' está definida no network.yaml e cada componente
+  possui o campo 'machine', os endereços de orderers e peers são gerados com
+  os IPs reais de cada máquina em vez de 'localhost'. Isso permite executar
+  create_channel.sh de qualquer nó do cluster com acesso à LAN. Sem
+  'machines', o comportamento é idêntico ao original (localhost).
 """
 import os
 import stat
 from ..utils import Colors as co
 
 class ChannelScriptGenerator:
-    def __init__(self, config, paths):
+    def __init__(self, config, paths, distributed=False):
         # inicializa a referencia de caminhos
         self.config = config
         self.paths = paths
 
+        # quando True, usa os IPs reais da seção 'machines' do network.yaml;
+        # quando False (padrão / modo local), todos os endereços usam 'localhost'.
+        self.distributed = distributed
+
         # caminho do script de saída
         self.script_saida = self.paths.scripts_dir / "create_channel.sh"
+
+    def _peer_address(self, peer, machines):
+        """Retorna HOST:PORTA do peer para CORE_PEER_ADDRESS (IP real em modo distribuído)."""
+        machine_name = peer.get('machine')
+        if machine_name and machine_name in machines:
+            return f"{machines[machine_name]['ip']}:{peer['port']}"
+        return f"localhost:{peer['port']}"
+
+    def _orderer_grpc_address(self, node, machines):
+        """Retorna HOST:PORTA GRPC do orderer (usada em peer channel fetch/update)."""
+        machine_name = node.get('machine')
+        if machine_name and machine_name in machines:
+            return f"{machines[machine_name]['ip']}:{node['port']}"
+        return f"localhost:{node['port']}"
+
+    def _orderer_admin_address(self, node, machines):
+        """Retorna HOST:PORTA de administração do orderer (osnadmin / health check)."""
+        machine_name = node.get('machine')
+        if machine_name and machine_name in machines:
+            return f"{machines[machine_name]['ip']}:{node['admin_port']}"
+        return f"localhost:{node['admin_port']}"
 
     def generate_channel_script(self):
         # coleta dados da topologia
         channels = self.config['network_topology'].get('channels', [])
         domain = self.config['network_topology']['network']['domain']
         orderer_node = self.config['network_topology']['orderer']['nodes'][0]
-        
+
+        # em modo local (distributed=False), machines fica vazio e todos os
+        # endereços caem no fallback 'localhost' dos helpers.
+        machines = self.config['network_topology'].get('machines', {}) if self.distributed else {}
+
         linhas = [
             "#!/bin/bash",
             "set -e",  # para a execucao em caso de erro
@@ -37,8 +73,8 @@ class ChannelScriptGenerator:
         # define variaveis de ambiente TLs para que o script possa falar com o orderer
         ord_full = f"{orderer_node['name']}.{domain}"
         ord_tls_path = f"{self.paths.network_dir}/organizations/ordererOrganizations/{domain}/orderers/{ord_full}/tls"
-        ord_address = f"localhost:{orderer_node['port']}"
-        
+        ord_address = self._orderer_grpc_address(orderer_node, machines)
+
         linhas.append(f"export ORD_CA={ord_tls_path}/ca.crt")
         linhas.append(f"export ORD_ADMIN_CERT={ord_tls_path}/server.crt")
         linhas.append(f"export ORD_ADMIN_KEY={ord_tls_path}/server.key\n")
@@ -47,12 +83,13 @@ class ChannelScriptGenerator:
             node_full = f"{node['name']}.{domain}"
             node_tls = f"{self.paths.network_dir}/organizations/ordererOrganizations/{domain}/orderers/{node_full}/tls"
             node_name = node['name']  # ← extrai antes
+            admin_addr = self._orderer_admin_address(node, machines)
             linhas.append(
                 f"until curl -sk "
                 f"--cert {node_tls}/server.crt "
                 f"--key {node_tls}/server.key "
                 f"--cacert {node_tls}/ca.crt "
-                f"https://localhost:{node['admin_port']}/participation/v1/channels "
+                f"https://{admin_addr}/participation/v1/channels "
                 f">/dev/null 2>&1; do "
                 f"echo 'Aguardando {node_name}...'; sleep 2; done"
             )
@@ -68,10 +105,11 @@ class ChannelScriptGenerator:
             for node in self.config['network_topology']['orderer']['nodes']:
                 node_full = f"{node['name']}.{domain}"
                 node_tls_path = f"{self.paths.network_dir}/organizations/ordererOrganizations/{domain}/orderers/{node_full}/tls"
-                
+                admin_addr = self._orderer_admin_address(node, machines)
+
                 cmd_osn = (
                     f"osnadmin channel join --channelID {ch_name} "
-                    f"--config-block {block_path} -o localhost:{node['admin_port']} "
+                    f"--config-block {block_path} -o {admin_addr} "
                     f"--ca-file {node_tls_path}/ca.crt "
                     f"--client-cert {node_tls_path}/server.crt "
                     f"--client-key {node_tls_path}/server.key"
@@ -94,12 +132,12 @@ class ChannelScriptGenerator:
                     linhas.append(f"export CORE_PEER_LOCALMSPID={org_data['msp_id']}")
                     linhas.append(f"export CORE_PEER_TLS_ROOTCERT_FILE={peer_base}/peers/{p_full}/tls/ca.crt")
                     linhas.append(f"export CORE_PEER_MSPCONFIGPATH={peer_base}/users/Admin@{org_name}.{domain}/msp")
-                    linhas.append(f"export CORE_PEER_ADDRESS=localhost:{peer['port']}")
+                    linhas.append(f"export CORE_PEER_ADDRESS={self._peer_address(peer, machines)}")
                     
                     linhas.append(f"peer channel join -b {block_path}")
 
                     if idx == 0:
-                        linhas.append(f"updateAnchorPeer '{org_name}' '{org_data['msp_id']}' '{ch_name}' '{peer['name']}' '{peer['port']}' '{ord_address}'")
+                        linhas.append(f"updateAnchorPeer '{org_name}' '{org_data['msp_id']}' '{ch_name}' '{peer['name']}' '{peer['port']}' '{ord_address}' '{domain}'")
 
         # salva o arquivo
         with open(self.script_saida, 'w') as f:
@@ -109,7 +147,7 @@ class ChannelScriptGenerator:
     def _get_anchor_peer_bash_function(self):
         return """
 function updateAnchorPeer() {
-    local org=$1; local msp=$2; local channel=$3; local peer_name=$4; local port=$5; local orderer=$6
+    local org=$1; local msp=$2; local channel=$3; local peer_name=$4; local port=$5; local orderer=$6; local domain=$7
     infoln "Definindo Anchor Peer para ${org} no canal ${channel}..."
 
     # 1. Fetch config
@@ -120,7 +158,7 @@ function updateAnchorPeer() {
     jq '.data.data[0].payload.data.config' config_block.json > config.json
 
     # 3. Adicionar o anchor peer no JSON
-    jq '.channel_group.groups.Application.groups.'${msp}'.values += {"AnchorPeers": {"mod_policy": "Admins","value": {"anchor_peers": [{"host": "'${peer_name}.${org}'.exemplo.com","port": '${port}'}]},"version": "0"}}' config.json > config_updated.json
+    jq '.channel_group.groups.Application.groups.'${msp}'.values += {"AnchorPeers": {"mod_policy": "Admins","value": {"anchor_peers": [{"host": "'${peer_name}.${org}.${domain}'","port": '${port}'}]},"version": "0"}}' config.json > config_updated.json
 
     # 4. Re-encode e calcular delta
     configtxlator proto_encode --input config.json --type common.Config --output config.pb
