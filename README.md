@@ -16,6 +16,7 @@
 [![Docker Compose](https://img.shields.io/badge/Docker_Compose-2.20-2496ED?style=for-the-badge&logo=docker)]()
 
 [![Status](https://img.shields.io/badge/Status-Em%20Andamento-yellow?style=for-the-badge)]()
+[![Versão](https://img.shields.io/badge/vers%C3%A3o-v1.0-brightgreen?style=for-the-badge&logo=github)](https://github.com/RianValcanaia/IC_Create_Network/releases/tag/v1.0)
 [![Licença](https://img.shields.io/badge/Licen%C3%A7a-MIT-lightgrey?style=for-the-badge)]()
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Visite%20meu%20perfil-blue?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/rian-carlos-valcanaia-b2b487168/)
@@ -184,14 +185,14 @@ flowchart TB
 
 ```text
 Definitivo/
-├── main.py                  # Ponto de entrada: --up, --clean, --start, --setup, --slurm-deploy
+├── main.py     # Ponto de entrada: --up, --clean, --start, --setup, --slurm-deploy
 ├── src/
-│   ├── path_manager.py       # Resolve caminhos; namespace network/<folder> por rede
-│   ├── config_loader.py      # Carrega e mescla network.yaml + versions.yaml
-│   ├── network_controller.py # Executa os scripts .sh injetando variáveis de ambiente
+│   ├── path_manager.py        # Resolve caminhos; namespace network/<folder> por rede
+│   ├── config_loader.py       # Carrega e mescla network.yaml + versions.yaml
+│   ├── network_controller.py  # Executa os scripts .sh injetando variáveis de ambiente
 │   ├── parser.py              # ConfigParser — validação semântica da topologia
 │   └── generator/
-│       ├── compose.py         # Docker Compose de CAs/peers/orderers (IP estático + machine)
+│       ├── compose.py         # Docker Compose de CAs/peers/orderers
 │       ├── crypto.py          # register_enroll.sh (fabric-ca-client)
 │       ├── configtx.py        # configtx.yaml + blocos de gênese/canal
 │       ├── channel.py         # create_channel.sh (osnadmin + peer channel join)
@@ -203,20 +204,16 @@ Definitivo/
 │   ├── versions.yaml          # Versões do Fabric/Fabric-CA/Go
 │   └── core.yaml              # Template de configuração do peer
 ├── chaincode/
-│   └── cc_basic_asset/         # Chaincode de exemplo (Go) com Private Data Collection
-├── builders/ccaas/             # Binários do CCaaS builder oficial do Fabric (versionado)
-├── scripts/                    # Scripts .sh estáticos e gerados dinamicamente
-│   ├── ledger_cli.sh            # CLI de invoke genérico no ledger (estático)
-│   ├── set_env.sh                # Auto-descobre a rede/org e exporta o ambiente do peer
+│   └── cc_basic_asset/        # Chaincode de exemplo com PDC
+├── builders/ccaas/            # Binários do CCaaS builder oficial do Fabric
+├── scripts/                   # Scripts .sh estáticos e gerados dinamicamente
+│   ├── ledger_cli.sh          # CLI de invoke genérico no ledger (estático)
+│   ├── set_env.sh             # Auto-descobre a rede/org e exporta o ambiente do peer
 │   ├── clean_all.sh / clean_network.sh / clean_node.sh
 │   └── (register_enroll.sh, create_artifacts.sh, create_channel.sh,
 │        deploy_chaincode.sh, start_chaincodes.sh — gerados a cada --up)
-├── network/                    # Runtime por rede: network/<folder>/{organizations,compose,...}
-├── bin/                        # Binários do Fabric (baixados automaticamente, não versionado)
-└── docs/  (na raiz do repositório, fora de Definitivo/)
-    ├── MEMORY.md                # Arquitetura, decisões e convenções permanentes
-    ├── WORKLOG.md                # Diário cronológico de desenvolvimento
-    └── NEXT_STEPS.md             # Roadmap e pendências
+├── network/    # Runtime por rede: network/<folder>
+└── bin/        # Binários do Fabric
 ```
 
 [⬆ Voltar ao topo](#topo)
@@ -225,12 +222,12 @@ Definitivo/
 
 # 🧬 Dependências de Terceiros
 
-| Componente | Versão | Papel |
-|---|---|---|
-| Hyperledger Fabric | `3.1.1` | Peers, orderers, `configtxgen`, `osnadmin`, `peer` CLI |
-| Hyperledger Fabric CA | `1.5.13` | `fabric-ca-server`/`fabric-ca-client` — emissão de identidades MSP/TLS |
-| CCaaS Builder | oficial (`fabric-samples/ccaas-builder`) | Binários `build`/`detect`/`release` vendorizados em [`builders/ccaas/bin`](builders/ccaas/bin) — necessários para o peer localizar e iniciar o chaincode no modelo CCaaS |
-| Go | `1.22+` | Compilação local do chaincode de exemplo antes do empacotamento CCaaS |
+| Componente | Versão |
+|---|---|
+| Hyperledger Fabric | `3.1.1` |
+| Hyperledger Fabric CA | `1.5.13` |
+| CCaaS Builder | oficial (`fabric-samples/ccaas-builder`) |
+| Go | `1.22+` |
 
 Os binários do Fabric/Fabric-CA são baixados automaticamente por
 `scripts/check_reqs.sh` (via `install-fabric.sh` oficial) na pasta `bin/` — não são
@@ -378,7 +375,7 @@ machines:
 
 # ▶ Como Executar
 
-### Modo local (uma rede, uma máquina)
+### Modo local
 
 ```bash
 # Sobe a rede completa
@@ -398,27 +395,6 @@ python3 main.py -n project_config/network_BFT.yaml --clean all
 
 Basta usar YAMLs com `network.name`/`network.folder` e `network.subnet` distintos —
 cada `--up` isola seus artefatos em `network/<folder>/` e sua própria docker network.
-
-### Deploy distribuído multi-máquina
-
-```bash
-# Setup completo a partir de qualquer máquina com acesso a todas as CAs (uma vez)
-python3 main.py -n project_config/network_dist.yaml --up
-
-# Em cada máquina, sobe apenas os containers atribuídos a ela
-python3 main.py -n project_config/network_dist.yaml --up --machine maquina_1
-python3 main.py -n project_config/network_dist.yaml --up --machine maquina_2
-```
-
-### Deploy distribuído via SLURM
-
-```bash
-# Gera o script de deploy (todas as fases, srun/wait) e imprime scp + sbatch
-python3 main.py -n project_config/network_dist.yaml --slurm-deploy --time 03:00:00
-```
-
-O comando gera `network/<folder>/logs/fabric-deploy.sh`; copie para o cluster e
-submeta com `sbatch` seguindo as instruções impressas no terminal.
 
 [⬆ Voltar ao topo](#topo)
 
@@ -442,14 +418,12 @@ python3 main.py -n project_config/network_BFT.yaml --up
 ```
 
 `ledger_cli.sh` é genérico: `<Org> <Peer> <channel> <chaincode> '<payload>'`
-funciona para qualquer canal/chaincode definido na topologia. O script só faz
-`invoke` — não há outras ações.
+funciona para qualquer canal/chaincode definido na topologia. 
 
-## 2. Limpar e subir novamente
+## 2. Limpar
 
 ```bash
 python3 main.py -n project_config/network_BFT.yaml --clean net
-python3 main.py -n project_config/network_BFT.yaml --up
 ```
 
 [⬆ Voltar ao topo](#topo)
