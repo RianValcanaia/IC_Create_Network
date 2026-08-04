@@ -103,6 +103,28 @@ class ConfigParser:
                 except ValueError:
                     self.erros.append(f"Network Subnet '{net['subnet']}' não é uma sub-rede CIDR válida (ex: '172.20.0.0/16').")
 
+            # 'macvlan' opcional: containers ganham IP real na subnet informada (via interface
+            # 'parent' já existente no host - real ou dummy) em vez de IP interno do bridge Docker.
+            # Permite mais de uma rede coexistir na mesma máquina com portas numéricas iguais,
+            # já que cada container passa a ser endereçável pelo próprio IP, sem publish/NAT.
+            if 'macvlan' in net:
+                mv = net['macvlan']
+                if not isinstance(mv, dict) or 'parent' not in mv:
+                    self.erros.append(
+                        "Network 'macvlan' deve ser um objeto com ao menos o campo 'parent' "
+                        "(nome da interface de rede do host, já existente, real ou dummy)."
+                    )
+                else:
+                    if ' ' in str(mv['parent']):
+                        self.erros.append(f"Network macvlan.parent '{mv['parent']}' não deve conter espaços.")
+                    if 'subnet' not in net:
+                        self.erros.append("Network 'macvlan' requer 'subnet' definido (a subnet real usada pela rede macvlan).")
+                    if 'gateway' in mv:
+                        try:
+                            ipaddress.ip_address(mv['gateway'])
+                        except ValueError:
+                            self.erros.append(f"Network macvlan.gateway '{mv['gateway']}' não é um IP válido.")
+
     # valida a seção organizations (orgs, CAs e Peers)
     def _valida_organizacoes(self):
         """

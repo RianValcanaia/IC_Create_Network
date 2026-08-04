@@ -28,6 +28,8 @@ remove_if_exists "$SCRIPTS_DIR/register_enroll.sh"
 remove_if_exists "$SCRIPTS_DIR/create_artifacts.sh"
 remove_if_exists "$SCRIPTS_DIR/create_channel.sh"
 remove_if_exists "$SCRIPTS_DIR/deploy_chaincode.sh"
+remove_if_exists "$SCRIPTS_DIR/redeploy_chaincode.sh"
+remove_if_exists "$SCRIPTS_DIR/start_chaincodes.sh"
 
 # remove artefatos de chaincode gerados pelo ChaincodeDeployGenerator
 # (pacote CCAAS e configuração de PDC; recriados a partir do nome no YAML a cada --up)

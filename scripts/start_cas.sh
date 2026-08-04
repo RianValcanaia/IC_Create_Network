@@ -19,23 +19,39 @@ if [ ! -f "$COMPOSE_FILE" ]; then
     exit 1
 fi
 
+# cria a docker network do zero: bridge padrao, ou macvlan quando NETWORK_MACVLAN_PARENT
+# estiver definido (via orquestrador) - containers ganham IP real na subnet do host,
+# atras da interface 'parent' ja existente (real ou dummy), sem publish/NAT de portas.
+create_docker_network() {
+    if [ -n "${NETWORK_MACVLAN_PARENT:-}" ]; then
+        infoln "Criando network macvlan $DOCKER_NET (parent: $NETWORK_MACVLAN_PARENT, subnet: $NETWORK_SUBNET, gateway: $NETWORK_MACVLAN_GATEWAY)"
+        docker network create -d macvlan \
+            --subnet "$NETWORK_SUBNET" \
+            --gateway "$NETWORK_MACVLAN_GATEWAY" \
+            -o parent="$NETWORK_MACVLAN_PARENT" \
+            "$DOCKER_NET"
+    else
+        docker network create ${NETWORK_SUBNET:+--subnet "$NETWORK_SUBNET"} "$DOCKER_NET"
+    fi
+}
+
 # criar a network, como este eh o primeiro docker-compose criamos aqui mesmo
 NETWORK_BASE=${NETWORK_NAME:-$(yq -r '.network.name' "$NETWORK_DIR/../project_config/network.yaml")}
 DOCKER_NET="${NETWORK_BASE}_net"
-# NETWORK_SUBNET (do YAML, via orquestrador) fixa a sub-rede -> IPs estáticos.
-# Se a rede já existir com sub-rede diferente, recria (sem containers, é seguro).
+
+# NETWORK_SUBNET fixa a sub-rede -> IPs estáticos.
 if docker network inspect "$DOCKER_NET" >/dev/null 2>&1; then
     CUR_SUBNET=$(docker network inspect "$DOCKER_NET" --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}')
     if [ -n "${NETWORK_SUBNET:-}" ] && [ "$CUR_SUBNET" != "$NETWORK_SUBNET" ]; then
         infoln "Recriando a network $DOCKER_NET (subnet $CUR_SUBNET -> $NETWORK_SUBNET)"
         docker network rm "$DOCKER_NET" >/dev/null 2>&1 || true
-        docker network create ${NETWORK_SUBNET:+--subnet "$NETWORK_SUBNET"} "$DOCKER_NET"
+        create_docker_network
     else
         infoln "Network $DOCKER_NET já existe (subnet: ${CUR_SUBNET:-auto})"
     fi
 else
     infoln "Criando a network $DOCKER_NET${NETWORK_SUBNET:+ (subnet $NETWORK_SUBNET)}"
-    docker network create ${NETWORK_SUBNET:+--subnet "$NETWORK_SUBNET"} "$DOCKER_NET"
+    create_docker_network
 fi
 
 # executa o docker compose
@@ -64,7 +80,7 @@ fi
 
 if docker ps --format '{{.Names}} {{.Image}}' | grep -q "fabric-ca"; then
     successln "--- CAs Iniciadas com Sucesso ---"
-    docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep "ca-" # filtra container que começam com ca-, se no network escrever de outra forma, dara erro aqui
+    docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep "ca-" 
 else
     warnln "Aviso: O docker-compose retornou sucesso, mas não encontrei containers 'fabric-ca' rodando."
     warnln "Verifique os logs com: docker-compose -f $COMPOSE_FILE logs"

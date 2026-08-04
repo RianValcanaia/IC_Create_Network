@@ -14,6 +14,14 @@ Suporte a deploy distribuído:
   responsabilidade de generate_ccaas_start_script(), rodado na máquina correta via
   '--start --machine X --phase ccaas'. Sem 'machines' (modo local), o comportamento
   é idêntico ao original.
+
+Suporte a macvlan:
+  Quando 'network.macvlan' está definido no network.yaml, cada peer/orderer/chaincode
+  já tem um IP real e estático na subnet do host (ver StaticIPAllocator). Os comandos
+  CLI usam esse IP em vez de 'localhost', e o 'docker run' do container CCAAS não
+  publica porta (-p) - o container já é alcançável pelo próprio IP, sem NAT (publish
+  de porta não é suportado por containers em rede macvlan). Mutuamente exclusivo com
+  'machines' (modo distribuído): se ambos estiverem presentes, 'machines' tem prioridade.
 """
 
 import ipaddress
@@ -23,9 +31,10 @@ import json
 import tarfile
 import io
 from ..utils import Colors as co
+from .addressing import StaticIPAllocator
 
 class ChaincodeDeployGenerator:
-    def __init__(self, config, paths, distributed=False):
+    def __init__(self, config, paths, distributed=False, macvlan=False):
         self.config = config
         self.paths = paths
 
@@ -33,10 +42,22 @@ class ChaincodeDeployGenerator:
         # quando False (padrão / modo local), todos os endereços usam 'localhost'.
         self.distributed = distributed
 
+        # quando True, usa o IP real/estático de cada peer/orderer/chaincode na
+        # subnet macvlan em vez de 'localhost' (ver StaticIPAllocator)
+        self.allocator = StaticIPAllocator(config)
+        self.macvlan = macvlan and self.allocator.enabled
+
         self.script_saida = self.paths.scripts_dir / "deploy_chaincode.sh"
         # subnet fixa da rede (YAML) -> chaincodes ganham IP estático .30+
         self.subnet = self.config['network_topology']['network'].get('subnet')
+        net = self.config['network_topology']['network']
+        self.folder = net.get('folder', net['name'])
         self._generate_collections_json()
+
+    def _cc_service_name(self, cc):
+        """Nome do container/hostname docker do chaincode CCaaS - único por rede
+        mesmo quando duas topologias usam o mesmo nome de chaincode/canal."""
+        return f"{cc['name']}.{cc['channel']}-{self.folder}"
 
     def _cc_ip_flag(self, cc_idx):
         """Flag --ip do docker run: IP estático .30+ na subnet (vazia sem subnet)"""
@@ -44,19 +65,32 @@ class ChaincodeDeployGenerator:
             return ""
         return f"--ip {ipaddress.ip_network(self.subnet)[0] + 30 + cc_idx} "
 
-    def _peer_address(self, peer, machines):
-        """Retorna HOST:PORTA do peer (IP real em modo distribuído, localhost em modo local)."""
-        machine_name = peer.get('machine')
+    def _cc_ports_flag(self, cc_port):
+        """Flag -p do docker run: omitida em modo macvlan (publish de porta não
+        funciona em containers de rede macvlan - o container já tem IP próprio)."""
+        if self.macvlan:
+            return ""
+        return f"-p {cc_port}:{cc_port} "
+
+    def _resolve_host(self, machine_name, machines, macvlan_ip):
+        """Ordem de prioridade: IP real de 'machines' (distribuído) > IP macvlan > 'localhost'."""
         if machine_name and machine_name in machines:
-            return f"{machines[machine_name]['ip']}:{peer['port']}"
-        return f"localhost:{peer['port']}"
+            return machines[machine_name]['ip']
+        if macvlan_ip:
+            return macvlan_ip
+        return "localhost"
+
+    def _peer_address(self, peer, machines, org_name):
+        """Retorna HOST:PORTA do peer."""
+        macvlan_ip = self.allocator.peer_ip(org_name, peer['name']) if self.macvlan else None
+        host = self._resolve_host(peer.get('machine'), machines, macvlan_ip)
+        return f"{host}:{peer['port']}"
 
     def _orderer_address(self, orderer, machines):
         """Retorna HOST:PORTA do orderer (usado nas flags -o de approve/commit)."""
-        machine_name = orderer.get('machine')
-        if machine_name and machine_name in machines:
-            return f"{machines[machine_name]['ip']}:{orderer['port']}"
-        return f"localhost:{orderer['port']}"
+        macvlan_ip = self.allocator.orderer_ip(orderer['name']) if self.macvlan else None
+        host = self._resolve_host(orderer.get('machine'), machines, macvlan_ip)
+        return f"{host}:{orderer['port']}"
 
     def generate(self):
         # em modo local (distributed=False), machines fica vazio e todos os
@@ -81,21 +115,17 @@ class ChaincodeDeployGenerator:
             fabric_version = self.config['env_versions']['versions']['fabric']
 
             package_file = (self.paths.chaincode_dir / f"{cc['name']}.tar.gz").resolve()
-            # sem PDC no YAML, nenhum arquivo de collections é gerado (ver
-            # _generate_collections_json) — a flag --collections-config é omitida.
+            # sem PDC no YAML, nenhum arquivo de collections é gerado, a flag --collections-config é omitida.
             has_pdc = bool(cc.get('pdc'))
             collections_flag = ""
             if has_pdc:
                 pdc_config = (self.paths.chaincode_dir / f"{cc['name']}_collections.json").resolve()
                 collections_flag = f"--collections-config {pdc_config} "
 
-            # caminho absoluto da pasta do chaincode: usa o campo 'path' do YAML
-            # quando presente (permite pasta com nome diferente do chaincode),
-            # senão cai no padrão chaincode/<name>
             abs_cc_path = ((self.paths.base_dir / cc['path']).resolve()
                            if cc.get('path') else (self.paths.chaincode_dir / cc['name']))
             
-            # porta do chaincode (cada cc tem a sua própria)
+            # porta do chaincode 
             cc_port = cc['port']
 
             # compilação local do chaincode para Linux AMD64
@@ -112,20 +142,16 @@ class ChaincodeDeployGenerator:
             for org in self.config['network_topology']['organizations']:
                 for peer in org['peers']:
                     p_full = f"{peer['name']}.{org['name']}.{domain}"
-                    linhas.append(f"infoln 'Instalando em {p_full} ({self._peer_address(peer, machines)})...'")
+                    linhas.append(f"infoln 'Instalando em {p_full} ({self._peer_address(peer, machines, org['name'])})...'")
                     linhas.extend(self._get_peer_env(org, peer, domain, machines))
                     linhas.append(f"peer lifecycle chaincode install {package_file}\n")
 
             # --- PACKAGE ID ---
             linhas.append(f"PACKAGE_ID=$(peer lifecycle chaincode queryinstalled | grep '{cc['name']}_{cc['version']}' | head -n 1 | sed -n 's/^Package ID: //; s/, Label:.*$//p')")
 
-            cc_service = f"{cc['name']}.{cc['channel']}"
+            cc_service = self._cc_service_name(cc)
 
-            # Em modo local, o container CCAAS sobe aqui mesmo, antes do approve.
-            # Em modo distribuído, o container é gerenciado pela fase 'ccaas' do
-            # SLURM (start_chaincodes.sh via --start --phase ccaas), rodando na
-            # máquina correta (cc['machine']) — subir aqui deployaria na máquina
-            # errada quando cc['machine'] != coordenador.
+            # Em modo local, o container CCAAS sobe aqui mesmo, antes do approve. Em modo distribuído, o container é gerenciado pela fase 'ccaas' do SLURM  (start_chaincodes.sh via --start --phase ccaas), rodando na máquina correta (cc['machine']) — subir aqui deployaria na máquina errada quando cc['machine'] != coordenador.
             if not self.distributed:
                 linhas.append(f"docker rm -f {cc_service} 2>/dev/null || true")
 
@@ -136,7 +162,7 @@ class ChaincodeDeployGenerator:
                 linhas.append(f"docker run -d --name {cc_service} --network {network_name}_net "
                             f"{self._cc_ip_flag(cc_idx)}"
                             f"--dns 8.8.8.8 "
-                            f"-p {cc_port}:{cc_port} "
+                            f"{self._cc_ports_flag(cc_port)}"
                             f"-e CHAINCODE_SERVER_ADDRESS=0.0.0.0:{cc_port} "
                             f"-e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID "
                             f"-v {abs_cc_path}:/opt/gopath/src/chaincode "
@@ -167,7 +193,7 @@ class ChaincodeDeployGenerator:
             tls_root_cas = ""
             for org in self.config['network_topology']['organizations']:
                 peer = org['peers'][0]
-                peer_addresses += f" --peerAddresses {self._peer_address(peer, machines)}"
+                peer_addresses += f" --peerAddresses {self._peer_address(peer, machines, org['name'])}"
                 tls_ca = (self.paths.network_dir / "organizations" / "peerOrganizations" / f"{org['name']}.{domain}" / "peers" / f"{peer['name']}.{org['name']}.{domain}" / "tls" / "ca.crt").resolve()
                 tls_root_cas += f" --tlsRootCertFiles {tls_ca}"
 
@@ -188,9 +214,6 @@ class ChaincodeDeployGenerator:
             f.write("\n".join(linhas))
         os.chmod(self.script_saida, os.stat(self.script_saida).st_mode | stat.S_IEXEC)
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Atualização (redeploy) de chaincode em rede já ativa
-    # ──────────────────────────────────────────────────────────────────────────
 
     def generate_redeploy(self):
         """
@@ -251,17 +274,17 @@ class ChaincodeDeployGenerator:
 
             self._create_ccaas_package(cc, package_file)
 
-            # --- ETAPA 1: reinstalação nos peers (só em modo 'ledger') ---
+            # --- reinstalação nos peers (só em modo 'ledger') ---
             linhas.append('\nif [ "$MODE" == "ledger" ]; then')
             for org in self.config['network_topology']['organizations']:
                 for peer in org['peers']:
                     p_full = f"{peer['name']}.{org['name']}.{domain}"
-                    linhas.append(f"    infoln 'Instalando novo pacote em {p_full} ({self._peer_address(peer, machines)})...'")
+                    linhas.append(f"    infoln 'Instalando novo pacote em {p_full} ({self._peer_address(peer, machines, org['name'])})...'")
                     linhas.extend([f"    {l}" for l in self._get_peer_env(org, peer, domain, machines)])
                     linhas.append(f"    peer lifecycle chaincode install {package_file}\n")
             linhas.append("fi")
 
-            # --- ETAPA 2: captura do PACKAGE_ID já instalado (existe desde o --up) ---
+            # --- captura do PACKAGE_ID já instalado (existe desde o --up) ---
             first_org = self.config['network_topology']['organizations'][0]
             first_peer = first_org['peers'][0]
             linhas.append("\n# Ambiente temporário para consultar o Package ID já instalado")
@@ -273,8 +296,8 @@ class ChaincodeDeployGenerator:
             linhas.append("    exit 1")
             linhas.append("fi")
 
-            # --- ETAPA 3: reinício do container CCAAS (sempre, em modo local) ---
-            cc_service = f"{cc['name']}.{cc['channel']}"
+            # --- reinício do container CCAAS (sempre, em modo local) ---
+            cc_service = self._cc_service_name(cc)
             if not self.distributed:
                 linhas.append(f"\ninfoln 'Reiniciando container do chaincode: {cc_service}'")
                 linhas.append(f"docker rm -f {cc_service} 2>/dev/null || true")
@@ -282,7 +305,7 @@ class ChaincodeDeployGenerator:
                 linhas.append(f"docker run -d --name {cc_service} --network {network_name}_net "
                             f"{self._cc_ip_flag(cc_idx)}"
                             f"--dns 8.8.8.8 "
-                            f"-p {cc_port}:{cc_port} "
+                            f"{self._cc_ports_flag(cc_port)}"
                             f"-e CHAINCODE_SERVER_ADDRESS=0.0.0.0:{cc_port} "
                             f"-e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID "
                             f"-v {abs_cc_path}:/opt/gopath/src/chaincode "
@@ -293,7 +316,7 @@ class ChaincodeDeployGenerator:
                 linhas.append(f"\ninfoln 'Modo distribuído: reinicie o container de {cc_service} na máquina responsável "
                               f"(--start --machine <nome> --phase ccaas).'")
 
-            # --- ETAPA 4: aprovação e commit (só em modo 'ledger') ---
+            # --- aprovação e commit (só em modo 'ledger') ---
             linhas.append('\nif [ "$MODE" == "ledger" ]; then')
             ord_tls_ca = (self.paths.network_dir / "organizations" / "ordererOrganizations" / domain / "orderers" / f"{orderer['name']}.{domain}" / "tls" / "ca.crt").resolve()
             ord_addr = self._orderer_address(orderer, machines)
@@ -315,7 +338,7 @@ class ChaincodeDeployGenerator:
             tls_root_cas = ""
             for org in self.config['network_topology']['organizations']:
                 peer = org['peers'][0]
-                peer_addresses += f" --peerAddresses {self._peer_address(peer, machines)}"
+                peer_addresses += f" --peerAddresses {self._peer_address(peer, machines, org['name'])}"
                 tls_ca = (self.paths.network_dir / "organizations" / "peerOrganizations" / f"{org['name']}.{domain}" / "peers" / f"{peer['name']}.{org['name']}.{domain}" / "tls" / "ca.crt").resolve()
                 tls_root_cas += f" --tlsRootCertFiles {tls_ca}"
 
@@ -339,10 +362,7 @@ class ChaincodeDeployGenerator:
         os.chmod(redeploy_script, os.stat(redeploy_script).st_mode | stat.S_IEXEC)
         co.successln(f"Script de redeploy gerado em: {redeploy_script}")
 
-    # ──────────────────────────────────────────────────────────────────────────
     # Script de startup CCAAS para modo distribuído
-    # ──────────────────────────────────────────────────────────────────────────
-
     def generate_ccaas_start_script(self, machine):
         """
         Gera start_chaincodes.sh com apenas os `docker run` dos chaincodes
@@ -402,11 +422,11 @@ class ChaincodeDeployGenerator:
             f"export CORE_PEER_LOCALMSPID={query_org['msp_id']}",
             f"export CORE_PEER_TLS_ROOTCERT_FILE={peer_base}/peers/{query_peer['name']}.{query_org['name']}.{domain}/tls/ca.crt",
             f"export CORE_PEER_MSPCONFIGPATH={peer_base}/users/Admin@{query_org['name']}.{domain}/msp",
-            f"export CORE_PEER_ADDRESS={self._peer_address(query_peer, machines)}",
+            f"export CORE_PEER_ADDRESS={self._peer_address(query_peer, machines, query_org['name'])}",
         ]
 
         for cc_idx, cc in enumerate(local_ccs):
-            cc_service = f"{cc['name']}.{cc['channel']}"
+            cc_service = self._cc_service_name(cc)
             cc_port = cc['port']
             abs_cc_path = ((self.paths.base_dir / cc['path']).resolve()
                            if cc.get('path') else (self.paths.chaincode_dir / cc['name']).resolve())
@@ -433,7 +453,7 @@ class ChaincodeDeployGenerator:
                 f"docker run -d --name {cc_service} --network {network_name}_net "
                 f"{self._cc_ip_flag(cc_idx)}"
                 f"--dns 8.8.8.8 "
-                f"-p {cc_port}:{cc_port} "
+                f"{self._cc_ports_flag(cc_port)}"
                 f"-e CHAINCODE_SERVER_ADDRESS=0.0.0.0:{cc_port} "
                 f"-e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID "
                 f"-v {abs_cc_path}:/opt/gopath/src/chaincode "
@@ -459,7 +479,7 @@ class ChaincodeDeployGenerator:
             f"export CORE_PEER_LOCALMSPID={org['msp_id']}",
             f"export CORE_PEER_TLS_ROOTCERT_FILE={peer_base}/peers/{p_full}/tls/ca.crt",
             f"export CORE_PEER_MSPCONFIGPATH={peer_base}/users/Admin@{org['name']}.{domain}/msp",
-            f"export CORE_PEER_ADDRESS={self._peer_address(peer, machines)}"
+            f"export CORE_PEER_ADDRESS={self._peer_address(peer, machines, org['name'])}"
         ]
 
     def _generate_collections_json(self):
@@ -492,7 +512,7 @@ class ChaincodeDeployGenerator:
 
     def _create_ccaas_package(self, cc, output_path):
         connection = {
-            "address": f"{cc['name']}.{cc['channel']}:{cc['port']}",  # porta dinâmica por chaincode
+            "address": f"{self._cc_service_name(cc)}:{cc['port']}",  # porta dinâmica por chaincode
             "dial_timeout": "10s",
             "tls_required": False
         }

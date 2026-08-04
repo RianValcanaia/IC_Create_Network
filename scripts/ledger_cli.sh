@@ -14,8 +14,6 @@ PROJECT_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 infon() { echo -e "\033[1;34m[INFO]\033[0m $1"; }
 
 # --- Carregar Ambiente do Peer Atual ---
-# set_env.sh já exporta CORE_PEER_ADDRESS/CORE_PEER_TLS_ROOTCERT_FILE do <Org> <Peer>
-# pedidos — são reaproveitados abaixo como único endossador da invocação.
 source "$SCRIPT_DIR/set_env.sh" "$1" "$2"
 if [ $? -ne 0 ]; then exit 1; fi
 
@@ -26,6 +24,9 @@ DOMAIN=$(jq -r '.domain' "$CONTEXT_FILE")
 ORDERER_PORT=$(jq -r '.orderers[0].port' "$CONTEXT_FILE")
 ORDERER_NAME=$(jq -r '.orderers[0].name' "$CONTEXT_FILE")
 ORDERER_CA="$NETWORK_DIR/organizations/ordererOrganizations/${DOMAIN}/orderers/${ORDERER_NAME}.${DOMAIN}/tls/ca.crt"
+
+ORDERER_IP=$(jq -r '.orderers[0].ip // empty' "$CONTEXT_FILE")
+ORDERER_HOST="${ORDERER_IP:-localhost}"
 
 # --- Preparar Argumentos ---
 # Uso: ./ledger_cli.sh <Org> <Peer> <channel> <chaincode> '<json payload>'
@@ -44,7 +45,7 @@ fi
 
 infon "Invocando função em $INVOKE_CC (canal $INVOKE_CHANNEL) usando somente $1/$2 como endossador..."
 peer chaincode invoke \
-    -o localhost:${ORDERER_PORT} \
+    -o ${ORDERER_HOST}:${ORDERER_PORT} \
     --ordererTLSHostnameOverride ${ORDERER_NAME}.${DOMAIN} \
     --tls --cafile "$ORDERER_CA" \
     -C "$INVOKE_CHANNEL" -n "$INVOKE_CC" \
