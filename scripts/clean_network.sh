@@ -48,9 +48,11 @@ if [ -d "$NET_DIR" ]; then
 fi
 
 # limpar scripts gerados 
-remove_if_exists "$PROJECT_ROOT/scripts/register_enroll.sh" 
-remove_if_exists "$PROJECT_ROOT/scripts/create_artifacts.sh" 
-remove_if_exists "$PROJECT_ROOT/scripts/create_channel.sh" 
-remove_if_exists "$PROJECT_ROOT/scripts/deploy_chaincode.sh" 
+remove_if_exists "$PROJECT_ROOT/scripts/register_enroll.sh"
+remove_if_exists "$PROJECT_ROOT/scripts/create_artifacts.sh"
+remove_if_exists "$PROJECT_ROOT/scripts/create_channel.sh"
+remove_if_exists "$PROJECT_ROOT/scripts/deploy_chaincode.sh"
+remove_if_exists "$PROJECT_ROOT/scripts/redeploy_chaincode.sh"
+remove_if_exists "$PROJECT_ROOT/scripts/start_chaincodes.sh"
 
 successln "Limpeza da rede concluída com sucesso!" 

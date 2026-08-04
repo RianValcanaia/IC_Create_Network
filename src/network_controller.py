@@ -10,6 +10,7 @@ import os
 import subprocess
 from pathlib import Path
 from .utils import Colors as co
+from .generator.addressing import default_gateway
 
 class NetworkController:
     def __init__(self, config, paths, log_to_file=False):
@@ -38,7 +39,14 @@ class NetworkController:
         """
         versions = self.config['env_versions']['versions']
         images = self.config['env_versions']['images']
-        network_name = self.config['network_topology']['network']['name']
+        net = self.config['network_topology']['network']
+        network_name = net['name']
+        subnet = net.get('subnet', '')
+
+        # macvlan opcional: containers ganham IP real na subnet via interface 'parent'
+        # do host, sem publish/NAT
+        macvlan_cfg = net.get('macvlan') or {}
+        macvlan_gateway = macvlan_cfg.get('gateway') or (default_gateway(subnet) if macvlan_cfg and subnet else '')
 
         # garante que os binarios do fabric na pasta /bin tenham prioridade sobre os binarios globais do sistema
         project_bin_path = str(self.paths.base_dir / "bin")
@@ -51,8 +59,10 @@ class NetworkController:
             "GO_VERSION": versions['go'],
             "DOCKER_IMAGE_PREFIX": images['org_hyperledger'],
             "NETWORK_NAME": network_name,
-            "NETWORK_FOLDER": self.config['network_topology']['network'].get('folder', network_name),
-            "NETWORK_SUBNET": self.config['network_topology']['network'].get('subnet', ''),
+            "NETWORK_FOLDER": net.get('folder', network_name),
+            "NETWORK_SUBNET": subnet,
+            "NETWORK_MACVLAN_PARENT": macvlan_cfg.get('parent', ''),
+            "NETWORK_MACVLAN_GATEWAY": macvlan_gateway,
             "NETWORK_CONFIG": str(self.paths.network_yaml),
             "PATH": f"{project_bin_path}:{system_path}"
         }

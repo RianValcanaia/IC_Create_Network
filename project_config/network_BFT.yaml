@@ -3,7 +3,6 @@
 network:
   name: "FabricNetwork"
   domain: "exemplo.com"  # Dominio base para todos os nos, nos serao nome.exemplo.com
-  subnet: "172.20.0.0/16"  # Opcional: fixa IPs estáticos por serviço, permite mais de uma rede coexistir na mesma máquina
 
 # Configuracao Global do Orderer
 orderer:

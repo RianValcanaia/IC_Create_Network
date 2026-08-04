@@ -128,7 +128,11 @@ flowchart TB
   `network/<folder>/` (campo opcional `network.folder`, fallback `network.name`) e,
   se `network.subnet` estiver definida, cada serviço (CA/orderer/peer/chaincode)
   recebe um IP estático determinístico dentro dessa subnet — sem colisão de
-  containers ou de rede Docker entre redes coexistentes.
+  containers ou de rede Docker entre redes coexistentes. Por padrão essa subnet é
+  interna ao Docker (as portas continuam publicadas no host); com o bloco opcional
+  `network.macvlan` (ver Guia de Configuração §7), os containers passam a usar o
+  IP real da subnet diretamente, sem publicar porta — necessário quando duas redes
+  coexistentes precisam usar **as mesmas portas numéricas**.
 - **Deploy distribuído multi-máquina**: a seção opcional `machines:` (nível raiz do
   YAML) mapeia máquinas para IPs reais da LAN; o campo `machine:` em
   CAs/peers/orderers/chaincodes atribui cada componente a uma máquina. O orquestrador
@@ -165,6 +169,10 @@ flowchart TB
 - **Multi-rede na mesma máquina**: `network.folder` + `network.subnet` opcionais
   isolam artefatos e IPs de cada rede, permitindo subir mais de uma rede
   simultaneamente sem colisão.
+- **macvlan (opcional)**: `network.macvlan` faz cada container ganhar IP real e
+  estático na subnet do host em vez de um IP interno do bridge Docker publicado
+  via porta — permite duas redes com **portas numéricas idênticas** coexistirem
+  sem qualquer conflito. Ver [Guia de Configuração §7](#7-opcional-macvlan--múltiplas-redes-com-portas-idênticas-ip-real-por-container).
 - **Deploy distribuído multi-máquina**: `machines`/`machine` + `--up --machine`,
   `--start`, `--setup` e `--slurm-deploy` espalham uma única rede por vários hosts,
   com endereçamento automático por IP real.
@@ -274,6 +282,11 @@ network:
   # Opcional: fixa uma subnet Docker -> IPs estáticos por serviço, permite
   # múltiplas redes coexistindo na mesma máquina.
   subnet: "172.20.0.0/16"
+  # Opcional: containers ganham IP real na subnet acima (macvlan) em vez de IP
+  # interno do bridge Docker — ver Guia de Configuração §7 antes de usar.
+  # macvlan:
+  #   parent: "eno1"
+  #   # gateway: "172.20.0.1"   # opcional, default = primeiro IP válido da subnet
 ```
 
 ### 2. Orderer (EtcdRaft ou SmartBFT)
@@ -369,6 +382,52 @@ machines:
     slurm_node: "baia2"
 ```
 
+### 7. (Opcional) macvlan 
+
+
+```yaml
+network:
+  name: "rede1"
+  domain: "exemplo.com"
+  subnet: "172.30.0.0/24"     # agora é a subnet usada para macvlan
+  macvlan:
+    parent: "dummy0"          # interface do host já existente (real ou dummy) 
+    # gateway: "172.30.0.1"   # opcional; default = primeiro IP válido da subnet
+```
+
+**Importante:** o orquestrador **não cria nem gerencia interfaces do host** — `parent`
+precisa apontar para uma interface que já existe antes do `--up`. São dois passos
+manuais:
+
+1. **Se for uma rede isolada/local**, crie uma interface `dummy` para servir de parent:
+   ```bash
+   sudo ip link add dummy0 type dummy
+   sudo ip link set dummy0 up
+   ```
+   Se for uma rede real na LAN, use o nome da NIC existente diretamente como `parent` (ex. `eno1`) — não crie nada, mas reserve o range de IPs que os offsets abaixo vão usar com quem administra essa rede.
+
+2. **Em ambos os casos**, crie o "shim" — uma interface macvlan própria do host,
+   necessária porque o Linux não deixa o namespace de rede do host falar com os
+   containers macvlan através da interface `parent` diretamente. Sem isso, os
+   scripts que rodam no host (`register_enroll.sh`, `create_channel.sh`,
+   `deploy_chaincode.sh`, `set_env.sh`/`ledger_cli.sh`) não conseguem alcançar CAs,
+   peers e orderers:
+   ```bash
+   sudo ip link add shim0 link dummy0 type macvlan mode bridge
+   sudo ip addr add 172.30.0.2/24 dev shim0  # IP livre dentro da subnet do yaml
+   sudo ip link set shim0 up
+   ```
+   Escolha o IP do shim fora dos offsets que o orquestrador usa dentro da subnet
+   (`.5+` CAs, `.10+` orderers, `.20+` peers, `.30+` chaincodes).
+
+3. Com o shim no ar, rode normalmente:
+   ```bash
+   python3 main.py -n project_config/rede1.yaml --up
+   ```
+   `start_cas.sh` já cria a network Docker como `-d macvlan -o parent=dummy0`
+   automaticamente — nenhum comando `docker network create` manual é necessário.
+
+
 [⬆ Voltar ao topo](#topo)
 
 ---
@@ -395,6 +454,9 @@ python3 main.py -n project_config/network_BFT.yaml --clean all
 
 Basta usar YAMLs com `network.name`/`network.folder` e `network.subnet` distintos —
 cada `--up` isola seus artefatos em `network/<folder>/` e sua própria docker network.
+Se as duas redes precisarem usar **as mesmas portas numéricas**, veja o bloco
+opcional `network.macvlan` (Guia de Configuração §7) — os pré-requisitos de host
+(interface `parent` + shim) precisam estar prontos antes do `--up`.
 
 [⬆ Voltar ao topo](#topo)
 

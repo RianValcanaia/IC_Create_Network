@@ -8,18 +8,12 @@ necessárias para rodar as Autoridades Certificadoras
 
 Rever: futuramente ver a TLS ativa para os CAs e a interface de operações.
 """
-import ipaddress
 import json
 import os
 import yaml
 import shutil
 from ..utils import Colors as co
-
-# Offsets dos IPs estáticos dentro da subnet da rede (deterministicos):
-# .5+ CAs | .10+ orderers | .20+ peers | .30+ chaincodes (ver deploy.py)
-IP_OFFSET_CA = 5
-IP_OFFSET_ORDERER = 10
-IP_OFFSET_PEER = 20
+from .addressing import StaticIPAllocator
 
 class ComposeGenerator:
     def __init__(self, config, paths, machine=None):
@@ -38,20 +32,24 @@ class ComposeGenerator:
         net = self.config['network_topology']['network']
         self.folder = net.get('folder', net['name'])
         self.subnet = net.get('subnet')
-        self._net_base = ipaddress.ip_network(self.subnet)[0] if self.subnet else None
 
-    def _static_ip(self, offset):
-        """IP estático determinístico dentro da subnet (None sem subnet no YAML)"""
-        if self._net_base is None:
-            return None
-        return str(self._net_base + offset)
+        # macvlan: containers ganham o IP estático diretamente na subnet real do host
+        # (via interface 'parent'), sem publish/NAT -> 'ports' é omitido dos serviços
+        self.macvlan = bool(net.get('macvlan'))
+        self.allocator = StaticIPAllocator(config)
 
-    def _service_networks(self, network_name, offset):
+    def _service_networks(self, network_name, ip):
         """Bloco 'networks' do serviço: com subnet vira dict com ipv4_address fixo"""
-        ip = self._static_ip(offset)
         if ip:
             return {network_name: {'ipv4_address': ip}}
         return [network_name]
+
+    def _ports(self, *port_pairs):
+        """Bloco 'ports' do serviço: omitido em modo macvlan, já que o container
+        tem IP próprio na subnet real e não precisa de publish/NAT do host."""
+        if self.macvlan:
+            return {}
+        return {'ports': [f"{p}:{p}" for p in port_pairs]}
 
     def _build_extra_hosts(self):
         """
@@ -78,12 +76,10 @@ class ComposeGenerator:
                 if peer_machine and peer_machine != self.machine and peer_machine in machines:
                     extra_hosts[f"{peer['name']}.{org['name']}.{domain}"] = machines[peer_machine]['ip']
 
-        # chaincodes CCAAS: peers precisam resolver o hostname do container chaincode
-        # mesmo que ele esteja em outra máquina
         for cc in self.config['network_topology'].get('chaincodes', []):
             cc_machine = cc.get('machine')
             if cc_machine and cc_machine != self.machine and cc_machine in machines:
-                cc_hostname = f"{cc['name']}.{cc['channel']}"
+                cc_hostname = f"{cc['name']}.{cc['channel']}-{self.folder}"
                 extra_hosts[cc_hostname] = machines[cc_machine]['ip']
 
         return extra_hosts
@@ -102,16 +98,12 @@ class ComposeGenerator:
         # cria a CA de cada Org de peers
         for ca_idx, org in enumerate(orgs):
             ca_config = org['ca']
-            # em modo distribuído, inclui apenas CAs atribuídas a esta máquina
-            # (o índice ca_idx é preservado sobre a lista completa para manter
-            # o IP estático determinístico mesmo quando filtrado)
+            # em modo distribuído, inclui apenas CAs atribuídas a esta máquina (o índice ca_idx é preservado sobre a lista completa para manter o IP estático determinístico mesmo quando filtrado)
             if self.machine and ca_config.get('machine') != self.machine:
                 continue
 
             org_name = org['name']
             service_name = ca_config['name']
-            # sufixo da rede: nomes de CA como 'ca-org1' se repetem entre topologias
-            # e o container_name é global no host docker (colisão entre redes coexistentes)
             container_name = f"{service_name}-{self.folder}"
             port = ca_config['port']
 
@@ -131,12 +123,12 @@ class ComposeGenerator:
                     "FABRIC_CA_SERVER_CSR_CN=" + service_name,
                     "FABRIC_CA_SERVER_CSR_HOSTS=0.0.0.0",
                 ],
-                'ports': [f"{port}:{port}"],
+                **self._ports(port),
                 'command': "sh -c 'fabric-ca-server start -b admin:adminpw -d'",
                 'volumes': [
                     f"../organizations/fabric-ca/{org_name}:{ca_server_home}"
                 ],
-                'networks': self._service_networks(network_name, IP_OFFSET_CA + ca_idx)
+                'networks': self._service_networks(network_name, self.allocator.ca_ip(org_name))
             }
 
         # CA do orderer
@@ -160,12 +152,12 @@ class ComposeGenerator:
                     f"FABRIC_CA_SERVER_CSR_CN={ord_ca_name}",
                     "FABRIC_CA_SERVER_CSR_HOSTS=0.0.0.0",
                 ],
-                'ports': [f"{ord_ca_port}:{ord_ca_port}"],
+                **self._ports(ord_ca_port),
                 'command': "sh -c 'fabric-ca-server start -b admin:adminpw -d'",
                 'volumes': [
                     f"../organizations/fabric-ca/{ord_org_folder}:/etc/hyperledger/fabric-ca-server"
                 ],
-                'networks': self._service_networks(network_name, IP_OFFSET_CA + len(orgs))
+                'networks': self._service_networks(network_name, self.allocator.orderer_ca_ip())
             }
 
         # estrutura final do compose para as CAs
@@ -197,13 +189,6 @@ class ComposeGenerator:
         # garante que o arquivo core.yaml padrao esteja na pasta de configuracao
         os.makedirs(self.paths.peer_cfg_dir, exist_ok=True)
         shutil.copy(self.paths.core_yaml_template, self.paths.peer_cfg_dir / "core.yaml")
-
-        # try:
-        #     target_file = self.paths.peer_cfg_dir / "core.yaml"
-        #     shutil.copy(self.paths.core_yaml_template, target_file)
-        # except Exception as e:
-        #     co.errorln(f"Erro ao copiar core.yaml: {e}")
-        #     return
 
         services = {}
         orgs = self.config['network_topology']['organizations']
@@ -255,11 +240,8 @@ class ComposeGenerator:
                     f"../organizations/ordererOrganizations/{domain}/orderers/{full_name}/tls/:/var/hyperledger/orderer/tls",
                     f"{full_name}:/var/hyperledger/production/orderer"  # dados do ledger persistente
                 ],
-                'ports': [
-                    f"{node['port']}:{node['port']}",
-                    f"{node['admin_port']}:{node['admin_port']}"
-                ],
-                'networks': self._service_networks(network_name, IP_OFFSET_ORDERER + ord_idx)
+                **self._ports(node['port'], node['admin_port']),
+                'networks': self._service_networks(network_name, self.allocator.orderer_ip(node['name']))
             }
             if extra_hosts:
                 orderer_svc['extra_hosts'] = [f"{host}:{ip}" for host, ip in extra_hosts.items()]
@@ -317,8 +299,8 @@ class ComposeGenerator:
                         f"{p_full}:/var/hyperledger/production",
                         f"../../../builders/ccaas:/opt/hyperledger/ccaas_builder"  # builder necessario para o modelo CCAAS (compose fica em network/<rede>/compose)
                     ],
-                    'ports': [f"{peer['port']}:{peer['port']}"],
-                    'networks': self._service_networks(network_name, IP_OFFSET_PEER + this_peer_idx),
+                    **self._ports(peer['port']),
+                    'networks': self._service_networks(network_name, self.allocator.peer_ip(org['name'], peer['name'])),
                     'command': 'peer node start'
                 }
                 if extra_hosts:
@@ -375,25 +357,22 @@ class ComposeGenerator:
             for peer in org['peers']:
                 p_full = f"{peer['name']}.{org_name}.{domain}"
 
-                # resolve o caminho absoluto do certificado TLS para o SDK validar a conexao
                 tls_cert_path = (orgs_root / "peerOrganizations" / f"{org_name}.{domain}" / "peers" / p_full / "tls" / "ca.crt").resolve()
-                # ccp["peers"][p_full] = {
-                #     "url": f"grpcs://localhost:{peer['port']}",
-                #     "tlsCACerts": {"path": str(tls_cert_path)},
-                #     "grpcOptions": {"ssl-target-name-override": p_full}
-                # }
                 ccp["peers"][p_full] = {
-                    "url": f"grpcs://{p_full}:{peer['port']}", # Usa o nome do container (ex: peer0.Org1.exemplo.com)
+                    "url": f"grpcs://{p_full}:{peer['port']}", 
                     "tlsCACerts": {"path": str(tls_cert_path)},
                     "grpcOptions": {"ssl-target-name-override": p_full}
                 }
 
             # apreenche os detalhes da CA no perfil de conexao
+            # (host da CA no nome do arquivo/URL: IP real da subnet em modo macvlan,
+            # 'localhost' no modo padrão - precisa bater com o host usado no enroll)
             ca_name = org['ca']['name']
-            ca_cert_path = f"../organizations/peerOrganizations/{org_name}.{domain}/msp/cacerts/localhost-{org['ca']['port']}-{ca_name}.pem"
-            
+            ca_host = self.allocator.ca_ip(org_name) if self.macvlan else "localhost"
+            ca_cert_path = f"../organizations/peerOrganizations/{org_name}.{domain}/msp/cacerts/{ca_host}-{org['ca']['port']}-{ca_name}.pem"
+
             ccp["certificateAuthorities"][ca_name] = {
-                "url": f"https://localhost:{org['ca']['port']}",
+                "url": f"https://{ca_host}:{org['ca']['port']}",
                 "caName": ca_name,
                 "tlsCACerts": {"path": ca_cert_path},
                 "httpOptions": {"verify": False}

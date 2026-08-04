@@ -70,6 +70,7 @@ from src.generator.configtx import ConfigTxGenerator
 from src.generator.channel import ChannelScriptGenerator
 from src.generator.deploy import ChaincodeDeployGenerator
 from src.generator.slurm import SlurmDeployGenerator
+from src.generator.addressing import StaticIPAllocator
 
 def _wait_for_port(host, port, timeout=60):
     """Aguarda até que uma porta específica esteja aberta"""
@@ -117,15 +118,16 @@ def _start_CA(controller, compose_path=None):
         co.errorln(f"\n Erro ao iniciar servidores CA: {e}")
         return
 
-def _register_enroll(controller, config, paths, distributed=False):
+def _register_enroll(controller, config, paths, distributed=False, macvlan=False):
     """
     Gera e executa register_enroll.sh.
     distributed=True: usa IPs reais das CAs (modo SLURM/coordenador).
-    distributed=False: usa localhost (modo local --up).
+    macvlan=True: usa o IP estático real de cada CA na subnet macvlan (modo local --up).
+    Nenhum dos dois: usa localhost (modo local --up padrão).
     """
     co.infoln("Registrando e matriculando identidades")
 
-    crypto = CryptoGenerator(config, paths, distributed=distributed)
+    crypto = CryptoGenerator(config, paths, distributed=distributed, macvlan=macvlan)
 
     co.actionln("Gerando script de identidades (register_enroll.sh)...")
     crypto.generate()
@@ -163,15 +165,16 @@ def _inicializa_nos(controller, config, paths, machine=None):
         co.errorln(f"\n Erro ao rodar 'start_nodes.sh': {e}")
         return
 
-def _configura_canais(controller, config, paths, distributed=False):
+def _configura_canais(controller, config, paths, distributed=False, macvlan=False):
     """
     Gera e executa create_channel.sh.
     distributed=True: usa IPs reais de peers e orderers (modo SLURM/coordenador).
-    distributed=False: usa localhost (modo local --up).
+    macvlan=True: usa o IP estático real de cada peer/orderer na subnet macvlan.
+    Nenhum dos dois: usa localhost (modo local --up padrão).
     """
     co.infoln("Configurando canais e fazendo peers entrarem neles")
 
-    channel_gen = ChannelScriptGenerator(config, paths, distributed=distributed)
+    channel_gen = ChannelScriptGenerator(config, paths, distributed=distributed, macvlan=macvlan)
     channel_gen.generate_channel_script()
 
     try:
@@ -180,16 +183,18 @@ def _configura_canais(controller, config, paths, distributed=False):
         co.errorln(f"\n Erro ao rodar 'create_channel.sh': {e}")
         return
 
-def _deploy_chaincode(controller, config, paths, distributed=False):
+def _deploy_chaincode(controller, config, paths, distributed=False, macvlan=False):
     """
     Gera e executa deploy_chaincode.sh.
     distributed=True: usa IPs reais de peers e orderers (modo SLURM/coordenador);
     o container CCAAS não é iniciado aqui (ver _start_chaincodes).
-    distributed=False: usa localhost e já inicia o container CCAAS (modo local --up).
+    macvlan=True: usa o IP estático real de cada peer/orderer/chaincode na subnet
+    macvlan e não publica porta do container CCAAS (modo local --up).
+    Nenhum dos dois: usa localhost e já inicia o container CCAAS (modo local --up padrão).
     """
     co.infoln("Fazendo deploy de chaincodes")
 
-    deploy_gen = ChaincodeDeployGenerator(config, paths, distributed=distributed)
+    deploy_gen = ChaincodeDeployGenerator(config, paths, distributed=distributed, macvlan=macvlan)
     deploy_gen.generate()
 
     try:
@@ -212,12 +217,18 @@ def _start_chaincodes(controller, config, paths, machine):
 
 def _exporta_network_contexto(config, paths):
     co.infoln("Exportando contexto ativo da rede")
+    macvlan_enabled = bool(config['network_topology']['network'].get('macvlan'))
+    allocator = StaticIPAllocator(config) if macvlan_enabled else None
 
     context = {
         "network": config['network_topology']['network']['name'],
         "domain": config['network_topology']['network']['domain'],
         "orderers": [
-            {"name": node['name'], "port": node['port']}
+            {
+                "name": node['name'],
+                "port": node['port'],
+                **({"ip": allocator.orderer_ip(node['name'])} if allocator else {})
+            }
             for node in config['network_topology']['orderer']['nodes']
         ],
         "orgs": {}
@@ -226,7 +237,14 @@ def _exporta_network_contexto(config, paths):
     for org in config['network_topology']['organizations']:
         org_data = {
             "msp_id": org['msp_id'],
-            "peers": {p['name']: {"port": p['port'], "tls_port": p.get('chaincode_port')} for p in org['peers']}
+            "peers": {
+                p['name']: {
+                    "port": p['port'],
+                    "tls_port": p.get('chaincode_port'),
+                    **({"ip": allocator.peer_ip(org['name'], p['name'])} if allocator else {})
+                }
+                for p in org['peers']
+            }
         }
         context["orgs"][org['name']] = org_data
 
@@ -264,6 +282,8 @@ def _network_up(controller, config, paths, machine=None):
     _valida_configuracoes(config)
     _exporta_network_contexto(config, paths)
 
+    macvlan_enabled = bool(config['network_topology']['network'].get('macvlan'))
+
     pkg_id_file = paths.network_dir / "CC_PACKAGE_ID"
     if not pkg_id_file.exists():
         pkg_id_file.touch()
@@ -272,20 +292,22 @@ def _network_up(controller, config, paths, machine=None):
 
    # --- Inicialização da rede ---
     _start_CA(controller)
-    _register_enroll(controller, config, paths)
+    _register_enroll(controller, config, paths, macvlan=macvlan_enabled)
     _cria_artefatos(controller, config, paths)
     _inicializa_nos(controller, config, paths)
-    _configura_canais(controller, config, paths)
-    _deploy_chaincode(controller, config, paths)
+    _configura_canais(controller, config, paths, macvlan=macvlan_enabled)
+    _deploy_chaincode(controller, config, paths, macvlan=macvlan_enabled)
 
     chaincodes = config['network_topology'].get('chaincodes', [])
-    for cc in chaincodes:
+    cc_allocator = StaticIPAllocator(config) if macvlan_enabled else None
+    for cc_idx, cc in enumerate(chaincodes):
         cc_port = cc.get('port')
         cc_name = cc.get('name', 'chaincode')
         if not cc_port:
             continue
-        co.infoln(f"Aguardando estabilização do chaincode '{cc_name}' (porta {cc_port})...")
-        if _wait_for_port("localhost", cc_port, timeout=120):
+        cc_host = cc_allocator.chaincode_ip(cc_idx) if cc_allocator else "localhost"
+        co.infoln(f"Aguardando estabilização do chaincode '{cc_name}' ({cc_host}:{cc_port})...")
+        if _wait_for_port(cc_host, cc_port, timeout=120):
             co.successln(f"Chaincode '{cc_name}' está escutando na porta {cc_port}!")
         else:
             co.warnln(f"Timeout: O chaincode '{cc_name}' não respondeu na porta {cc_port} a tempo.")
@@ -378,7 +400,8 @@ def _redeploy_chaincode(controller, config, paths, mode, cc_name=None):
     alvo = f" (alvo: {cc_name})" if cc_name else " (todos os chaincodes)"
     co.headerln(f"Atualizando chaincode — modo '{mode}'{alvo}")
 
-    deploy_gen = ChaincodeDeployGenerator(config, paths)
+    macvlan_enabled = bool(config['network_topology']['network'].get('macvlan'))
+    deploy_gen = ChaincodeDeployGenerator(config, paths, macvlan=macvlan_enabled)
     deploy_gen.generate_redeploy()
 
     env_vars = {
@@ -455,7 +478,13 @@ def _register_user(config, paths, org_name, username, secret):
     ca_port = org['ca']['port']
     machines = config['network_topology'].get('machines', {})
     ca_machine = org['ca'].get('machine')
-    ca_host = machines[ca_machine]['ip'] if ca_machine and ca_machine in machines else "localhost"
+    macvlan_enabled = bool(config['network_topology']['network'].get('macvlan'))
+    if ca_machine and ca_machine in machines:
+        ca_host = machines[ca_machine]['ip']
+    elif macvlan_enabled:
+        ca_host = StaticIPAllocator(config).ca_ip(org_name) or "localhost"
+    else:
+        ca_host = "localhost"
     ca_url = f"http://{ca_host}:{ca_port}"
 
     ca_client_home = paths.network_dir / "organizations" / "fabric-ca" / org_name / "client"

@@ -11,13 +11,21 @@ Suporte a deploy distribuído:
   os IPs reais de cada máquina em vez de 'localhost'. Isso permite executar
   create_channel.sh de qualquer nó do cluster com acesso à LAN. Sem
   'machines', o comportamento é idêntico ao original (localhost).
+
+Suporte a macvlan:
+  Quando 'network.macvlan' está definido no network.yaml, cada peer/orderer já
+  tem um IP real e estático na subnet do host (ver StaticIPAllocator) - os
+  endereços usados por este script usam esse IP em vez de 'localhost'.
+  Mutuamente exclusivo com 'machines' (modo distribuído): se ambos estiverem
+  presentes, 'machines' tem prioridade.
 """
 import os
 import stat
 from ..utils import Colors as co
+from .addressing import StaticIPAllocator
 
 class ChannelScriptGenerator:
-    def __init__(self, config, paths, distributed=False):
+    def __init__(self, config, paths, distributed=False, macvlan=False):
         # inicializa a referencia de caminhos
         self.config = config
         self.paths = paths
@@ -26,29 +34,39 @@ class ChannelScriptGenerator:
         # quando False (padrão / modo local), todos os endereços usam 'localhost'.
         self.distributed = distributed
 
+        # quando True, usa o IP real/estático de cada peer/orderer na subnet
+        # macvlan em vez de 'localhost' (ver StaticIPAllocator)
+        self.allocator = StaticIPAllocator(config)
+        self.macvlan = macvlan and self.allocator.enabled
+
         # caminho do script de saída
         self.script_saida = self.paths.scripts_dir / "create_channel.sh"
 
-    def _peer_address(self, peer, machines):
-        """Retorna HOST:PORTA do peer para CORE_PEER_ADDRESS (IP real em modo distribuído)."""
-        machine_name = peer.get('machine')
+    def _resolve_host(self, machine_name, machines, macvlan_ip):
+        """Ordem de prioridade: IP real de 'machines' (distribuído) > IP macvlan > 'localhost'."""
         if machine_name and machine_name in machines:
-            return f"{machines[machine_name]['ip']}:{peer['port']}"
-        return f"localhost:{peer['port']}"
+            return machines[machine_name]['ip']
+        if macvlan_ip:
+            return macvlan_ip
+        return "localhost"
+
+    def _peer_address(self, peer, machines, org_name):
+        """Retorna HOST:PORTA do peer para CORE_PEER_ADDRESS."""
+        macvlan_ip = self.allocator.peer_ip(org_name, peer['name']) if self.macvlan else None
+        host = self._resolve_host(peer.get('machine'), machines, macvlan_ip)
+        return f"{host}:{peer['port']}"
 
     def _orderer_grpc_address(self, node, machines):
         """Retorna HOST:PORTA GRPC do orderer (usada em peer channel fetch/update)."""
-        machine_name = node.get('machine')
-        if machine_name and machine_name in machines:
-            return f"{machines[machine_name]['ip']}:{node['port']}"
-        return f"localhost:{node['port']}"
+        macvlan_ip = self.allocator.orderer_ip(node['name']) if self.macvlan else None
+        host = self._resolve_host(node.get('machine'), machines, macvlan_ip)
+        return f"{host}:{node['port']}"
 
     def _orderer_admin_address(self, node, machines):
         """Retorna HOST:PORTA de administração do orderer (osnadmin / health check)."""
-        machine_name = node.get('machine')
-        if machine_name and machine_name in machines:
-            return f"{machines[machine_name]['ip']}:{node['admin_port']}"
-        return f"localhost:{node['admin_port']}"
+        macvlan_ip = self.allocator.orderer_ip(node['name']) if self.macvlan else None
+        host = self._resolve_host(node.get('machine'), machines, macvlan_ip)
+        return f"{host}:{node['admin_port']}"
 
     def generate_channel_script(self):
         # coleta dados da topologia
@@ -56,8 +74,7 @@ class ChannelScriptGenerator:
         domain = self.config['network_topology']['network']['domain']
         orderer_node = self.config['network_topology']['orderer']['nodes'][0]
 
-        # em modo local (distributed=False), machines fica vazio e todos os
-        # endereços caem no fallback 'localhost' dos helpers.
+        # em modo local , machines fica vazio e todos os endereços caem no fallback 'localhost' dos helpers.
         machines = self.config['network_topology'].get('machines', {}) if self.distributed else {}
 
         linhas = [
@@ -82,7 +99,7 @@ class ChannelScriptGenerator:
         for node in self.config['network_topology']['orderer']['nodes']:
             node_full = f"{node['name']}.{domain}"
             node_tls = f"{self.paths.network_dir}/organizations/ordererOrganizations/{domain}/orderers/{node_full}/tls"
-            node_name = node['name']  # ← extrai antes
+            node_name = node['name']  # extrai antes
             admin_addr = self._orderer_admin_address(node, machines)
             linhas.append(
                 f"until curl -sk "
@@ -101,7 +118,7 @@ class ChannelScriptGenerator:
             
             linhas.append(f"infoln '>> Configurando Canal: {ch_name} <<'")
             
-            # 1. faz todos os orderers entrarem no canal usando osnadmin
+            # faz todos os orderers entrarem no canal usando osnadmin
             for node in self.config['network_topology']['orderer']['nodes']:
                 node_full = f"{node['name']}.{domain}"
                 node_tls_path = f"{self.paths.network_dir}/organizations/ordererOrganizations/{domain}/orderers/{node_full}/tls"
@@ -118,7 +135,7 @@ class ChannelScriptGenerator:
 
             linhas.append("sleep 2") # pausa para a estabilizacao da rede
             
-            # 2. Faz os peers entrarem no canal
+            # Faz os peers entrarem no canal
             for org_name in ch['participating_orgs']:
                 # pega os dados da organizacao participante
                 org_data = next(o for o in self.config['network_topology']['organizations'] if o['name'] == org_name)
@@ -132,7 +149,7 @@ class ChannelScriptGenerator:
                     linhas.append(f"export CORE_PEER_LOCALMSPID={org_data['msp_id']}")
                     linhas.append(f"export CORE_PEER_TLS_ROOTCERT_FILE={peer_base}/peers/{p_full}/tls/ca.crt")
                     linhas.append(f"export CORE_PEER_MSPCONFIGPATH={peer_base}/users/Admin@{org_name}.{domain}/msp")
-                    linhas.append(f"export CORE_PEER_ADDRESS={self._peer_address(peer, machines)}")
+                    linhas.append(f"export CORE_PEER_ADDRESS={self._peer_address(peer, machines, org_name)}")
                     
                     linhas.append(f"peer channel join -b {block_path}")
 

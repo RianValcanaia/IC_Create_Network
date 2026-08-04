@@ -11,13 +11,21 @@ Suporte a deploy distribuído:
   cada CA em vez de 'localhost'. Isso permite executar register_enroll.sh de
   qualquer máquina do cluster que enxergue a LAN. Sem 'machines', o
   comportamento é idêntico ao original (localhost).
+
+Suporte a macvlan:
+  Quando 'network.macvlan' está definido no network.yaml, cada CA/peer/orderer
+  já tem um IP real e estático na subnet do host (ver ComposeGenerator e
+  StaticIPAllocator) - as URLs do fabric-ca-client e os IP SANs dos certificados
+  TLS usam esse IP em vez de 'localhost'. Mutuamente exclusivo com 'machines'
+  (modo distribuído): se ambos estiverem presentes, 'machines' tem prioridade.
 """
 import os
 import stat
 from ..utils import Colors as co
+from .addressing import StaticIPAllocator
 
 class CryptoGenerator:
-    def __init__(self, config, paths, distributed=False):
+    def __init__(self, config, paths, distributed=False, macvlan=False):
         # inicializa as referencias de configuracao
         self.config = config
         self.paths = paths
@@ -26,20 +34,33 @@ class CryptoGenerator:
         # quando False (padrão / modo local), todos os endereços usam 'localhost'.
         self.distributed = distributed
 
+        # quando True, usa o IP real/estático de cada CA/peer/orderer na subnet
+        # macvlan em vez de 'localhost' (ver StaticIPAllocator)
+        self.allocator = StaticIPAllocator(config)
+        self.macvlan = macvlan and self.allocator.enabled
+
         # local de saida do script register_enroll.sh
         self.script_saida = self.paths.scripts_dir / "register_enroll.sh"
 
-    def _ca_host(self, ca_config, machines):
+    def _resolve_host(self, machine_name, machines, macvlan_ip):
         """
-        Retorna o host (IP ou 'localhost') de uma CA para uso nas URLs do
-        fabric-ca-client. Em modo local (ou sem 'machine' na CA), retorna
-        'localhost'. Em modo distribuído, retorna o IP real da máquina que
-        hospeda a CA.
+        Resolve o host (IP ou 'localhost') de um componente da rede, na ordem:
+        1. IP real da máquina em 'machines' (modo distribuído, se aplicável);
+        2. IP estático macvlan do próprio componente (se modo macvlan ativo);
+        3. 'localhost' (modo local padrão).
         """
-        machine_name = ca_config.get('machine')
         if machine_name and machine_name in machines:
             return machines[machine_name]['ip']
+        if macvlan_ip:
+            return macvlan_ip
         return "localhost"
+
+    def _ca_host(self, ca_config, machines, macvlan_ip=None):
+        """
+        Retorna o host (IP ou 'localhost') de uma CA para uso nas URLs do
+        fabric-ca-client. Ver _resolve_host para a ordem de prioridade.
+        """
+        return self._resolve_host(ca_config.get('machine'), machines, macvlan_ip)
 
     # gera o conteudo do script bash para registro e matricula das identidades
     def generate(self):
@@ -48,8 +69,6 @@ class CryptoGenerator:
         orderer_conf = self.config['network_topology']['orderer']
         domain = self.config['network_topology']['network']['domain']
 
-        # em modo local (distributed=False), machines fica vazio e todos os
-        # endereços caem no fallback 'localhost' dos helpers.
         machines = self.config['network_topology'].get('machines', {}) if self.distributed else {}
 
         linhas = []
@@ -81,8 +100,8 @@ command -v fabric-ca-client >/dev/null || {
             ca_port = org['ca']['port']
             ca_name = org['ca']['name']
 
-            # host da CA desta org: IP real em modo distribuído, localhost em modo local
-            ca_host = self._ca_host(org['ca'], machines)
+            # host da CA desta org: IP real em modo distribuído/macvlan, localhost em modo local
+            ca_host = self._ca_host(org['ca'], machines, self.allocator.ca_ip(org_name) if self.macvlan else None)
             ca_url = f"http://{ca_host}:{ca_port}"
 
             # define o diretorio base da organizacao e a home temporaria do cliente CA
@@ -109,6 +128,8 @@ command -v fabric-ca-client >/dev/null || {
                 p_pass = f"{p_name}pw"
                 peer_machine = peer.get('machine')
                 peer_ip = machines.get(peer_machine, {}).get('ip', '') if peer_machine else ''
+                if not peer_ip and self.macvlan:
+                    peer_ip = self.allocator.peer_ip(org_name, p_name) or ''
                 # chamada da funcao bash definida (7º arg: IP real do peer p/ TLS SAN)
                 linhas.append(f"registerAndEnrollPeer '{p_name}' '{p_pass}' '{ca_url}' '{ca_name}' '{p_full}' '{org_base_dir}' '{peer_ip}'")
 
@@ -127,8 +148,8 @@ command -v fabric-ca-client >/dev/null || {
         ord_ca_name = ord_ca_conf.get('name', 'ca-orderer')
         ord_ca_port = ord_ca_conf.get('port', 7054)
 
-        # host da CA do orderer: IP real em modo distribuído, localhost em modo local
-        ord_ca_host = self._ca_host(ord_ca_conf, machines)
+        # host da CA do orderer: IP real em modo distribuído/macvlan, localhost em modo local
+        ord_ca_host = self._ca_host(ord_ca_conf, machines, self.allocator.orderer_ca_ip() if self.macvlan else None)
         ord_ca_url = f"http://{ord_ca_host}:{ord_ca_port}"
 
         # define home do client da CA do Orderer
@@ -153,6 +174,8 @@ command -v fabric-ca-client >/dev/null || {
             o_full = f"{o_name}.{domain}"
             node_machine = node.get('machine')
             node_ip = machines.get(node_machine, {}).get('ip', '') if node_machine else ''
+            if not node_ip and self.macvlan:
+                node_ip = self.allocator.orderer_ip(o_name) or ''
             # chamada da funcao bash modular para orderer (7º arg: IP real p/ TLS SAN)
             linhas.append(f"registerAndEnrollOrdererNode '{o_name}' '{o_pass}' '{ord_ca_url}' '{ord_ca_name}' '{o_full}' '{ord_base_dir}' '{node_ip}'")
 
