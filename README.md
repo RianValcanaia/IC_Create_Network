@@ -414,7 +414,7 @@ manuais:
    peers e orderers:
    ```bash
    sudo ip link add shim0 link dummy0 type macvlan mode bridge
-   sudo ip addr add 172.30.0.2/24 dev shim0  # IP livre dentro da subnet do yaml
+   sudo ip addr add 172.20.0.100/24 dev shim0  # IP livre dentro da subnet do yaml
    sudo ip link set shim0 up
    ```
    Escolha o IP do shim fora dos offsets que o orquestrador usa dentro da subnet
