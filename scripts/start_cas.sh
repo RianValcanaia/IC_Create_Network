@@ -15,7 +15,6 @@ COMPOSE_FILE="${COMPOSE_FILE:-$NETWORK_DIR/compose/compose-ca.yaml}"
 # verificacao de seguranca
 if [ ! -f "$COMPOSE_FILE" ]; then
     errorln "Arquivo não encontrado: $COMPOSE_FILE"
-    errorln "O gerador Python (src/generator/compose.py) rodou com sucesso?"
     exit 1
 fi
 
