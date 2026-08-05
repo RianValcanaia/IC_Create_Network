@@ -16,7 +16,7 @@
 [![Docker Compose](https://img.shields.io/badge/Docker_Compose-2.20-2496ED?style=for-the-badge&logo=docker)]()
 
 [![Status](https://img.shields.io/badge/Status-Em%20Andamento-yellow?style=for-the-badge)]()
-[![Versão](https://img.shields.io/badge/vers%C3%A3o-v1.0-brightgreen?style=for-the-badge&logo=github)](https://github.com/RianValcanaia/IC_Create_Network/releases/tag/v1.0)
+[![Versão](https://img.shields.io/badge/vers%C3%A3o-v1.1-brightgreen?style=for-the-badge&logo=github)](https://github.com/RianValcanaia/IC_Create_Network/releases/tag/v1.1)
 [![Licença](https://img.shields.io/badge/Licen%C3%A7a-MIT-lightgrey?style=for-the-badge)]()
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Visite%20meu%20perfil-blue?style=for-the-badge&logo=linkedin)](https://www.linkedin.com/in/rian-carlos-valcanaia-b2b487168/)
