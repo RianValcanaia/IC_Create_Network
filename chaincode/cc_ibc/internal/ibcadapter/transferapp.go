@@ -16,7 +16,7 @@ import (
 )
 
 // TransferApp é a porttypes.IBCModule real bindada na porta "transfer"
-// (T34), substituindo StubTransferApp (que nunca decodificava o pacote
+// , substituindo StubTransferApp (que nunca decodificava o pacote
 // e sempre devolvia ack de sucesso). Reaproveita os tipos/funções reais
 // do próprio ibc-go (FungibleTokenPacketData, ibctransfertypes.ModuleCdc
 // - mesmo formato JSON que o transfer module real de cosmos_chain_0 já
@@ -36,7 +36,7 @@ var _ porttypes.IBCModule = TransferApp{}
 // EscrowAccount é a "conta" de escrow desta chain para um port/channel -
 // um identificador opaco determinístico (não uma identidade Fabric real),
 // mesmo papel do endereço ADR-028 do ibc-go ou do
-// keccak256(this, channelId) do ICS20Transfer.sol (T10/T23).
+// keccak256(this, channelId) do ICS20Transfer.sol.
 func EscrowAccount(portID, channelID string) string {
 	return fmt.Sprintf("ics20-escrow/%s/%s", portID, channelID)
 }
