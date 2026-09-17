@@ -9,6 +9,7 @@ package main
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	stdlog "log"
 	"os"
@@ -377,6 +378,81 @@ func (s *SmartContract) QueryNextSequenceReceive(ctx contractapi.TransactionCont
 		return "", fmt.Errorf("cc_ibc: next sequence recv not found for %s/%s", portID, channelID)
 	}
 	return strconv.FormatUint(seq, 10), nil
+}
+
+// QueryNextSequenceSend devolve a próxima sequence de envio do canal -
+// usada pelo relayer (relayer/chains/fabric/chain.go,
+// QueryUnfinalizedRelayPackets) pra saber até que sequence iterar
+// procurando pacotes enviados por esta chain ainda não relayados.
+func (s *SmartContract) QueryNextSequenceSend(ctx contractapi.TransactionContextInterface, portID, channelID string) (string, error) {
+	k, sdkCtx := newKeeper(ctx.GetStub())
+	seq, found := k.ChannelKeeper.GetNextSequenceSend(sdkCtx, portID, channelID)
+	if !found {
+		return "", fmt.Errorf("cc_ibc: next sequence send not found for %s/%s", portID, channelID)
+	}
+	return strconv.FormatUint(seq, 10), nil
+}
+
+// QuerySentPacket devolve o channeltypes.Packet completo (JSON) que foi
+// enviado nessa sequence - gravado por Keeper.SendTransfer
+// (internal/ibcadapter/transfer_send.go) no momento do envio, já que o
+// ChannelKeeper real só persiste o commitment (hash) do pacote, não o
+// pacote em si.
+func (s *SmartContract) QuerySentPacket(ctx contractapi.TransactionContextInterface, portID, channelID string, sequence uint64) (string, error) {
+	k, _ := newKeeper(ctx.GetStub())
+	packet, found, err := k.Sent.Get(portID, channelID, sequence)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", fmt.Errorf("cc_ibc: sent packet not found for %s/%s/%d", portID, channelID, sequence)
+	}
+	bz, err := json.Marshal(&packet)
+	if err != nil {
+		return "", err
+	}
+	return string(bz), nil
+}
+
+// QueryReceivedHighSequence devolve a maior sequence já recebida nesse
+// canal - usada pelo relayer (QueryUnfinalizedRelayAcknowledgements,
+// relayer/chains/fabric/chain.go) pra saber até que sequence iterar
+// procurando acknowledgements ainda não relayados de volta. Canais
+// ICS-20 são UNORDERED, então NextSequenceRecv não serve pra isso (fica
+// travado em 1 por spec) - ver ReceivedPacketStore
+// (internal/ibcadapter/receivedpacket.go).
+func (s *SmartContract) QueryReceivedHighSequence(ctx contractapi.TransactionContextInterface, portID, channelID string) (string, error) {
+	k, _ := newKeeper(ctx.GetStub())
+	high, err := k.Received.HighSequence(portID, channelID)
+	if err != nil {
+		return "", err
+	}
+	return strconv.FormatUint(high, 10), nil
+}
+
+// QueryReceivedPacket devolve (JSON) o Packet recebido e a
+// Acknowledgement escrita pra essa sequence - gravados por
+// Keeper.RecvPacket (internal/ibcadapter/msg_server.go) no momento do
+// recebimento, já que o ChannelKeeper real só persiste o hash da
+// Acknowledgement, não ela em si.
+func (s *SmartContract) QueryReceivedPacket(ctx contractapi.TransactionContextInterface, portID, channelID string, sequence uint64) (string, error) {
+	k, _ := newKeeper(ctx.GetStub())
+	packet, ack, found, err := k.Received.Get(portID, channelID, sequence)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", fmt.Errorf("cc_ibc: received packet not found for %s/%s/%d", portID, channelID, sequence)
+	}
+	resp := struct {
+		Packet          channeltypes.Packet `json:"packet"`
+		Acknowledgement []byte              `json:"acknowledgement"`
+	}{Packet: packet, Acknowledgement: ack}
+	bz, err := json.Marshal(&resp)
+	if err != nil {
+		return "", err
+	}
+	return string(bz), nil
 }
 
 func (s *SmartContract) QueryPacketCommitment(ctx contractapi.TransactionContextInterface, portID, channelID string, sequence uint64) (string, error) {

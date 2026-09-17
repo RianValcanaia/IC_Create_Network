@@ -286,6 +286,15 @@ func (k Keeper) RecvPacket(goCtx context.Context, msg *channeltypes.MsgRecvPacke
 		if err := k.ChannelKeeper.WriteAcknowledgement(ctx, capability, msg.Packet, ack); err != nil {
 			return nil, err
 		}
+		// Guarda o Packet + Acknowledgement reais - o ChannelKeeper só
+		// grava o hash (CommitAcknowledgement) no state, então sem isso
+		// a Acknowledgement que acabou de ser escrita nunca poderia ser
+		// relayada de volta pro remetente original (`tx
+		// relay-acknowledgements`, QueryUnfinalizedRelayAcknowledgements
+		// em relayer/chains/fabric/chain.go).
+		if err := k.Received.Put(msg.Packet.DestinationPort, msg.Packet.DestinationChannel, msg.Packet, ack.Acknowledgement()); err != nil {
+			return nil, err
+		}
 	}
 
 	return &channeltypes.MsgRecvPacketResponse{Result: channeltypes.SUCCESS}, nil
