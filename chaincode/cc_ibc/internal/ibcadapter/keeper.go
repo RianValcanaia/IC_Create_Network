@@ -62,7 +62,9 @@ type Keeper struct {
 	CapabilityKeeper *capabilitykeeper.Keeper
 	transferScope    capabilitykeeper.ScopedKeeper
 
-	Bank BankKeeper
+	Bank     BankKeeper
+	Sent     SentPacketStore
+	Received ReceivedPacketStore
 }
 
 func NewKeeper(cdc codec.BinaryCodec, ms storetypes.MultiStore, keys map[string]storetypes.StoreKey, memKeys map[string]*storetypes.MemoryStoreKey, selfSeqValue uint64, selfSeqTimestamp int64, bankDB *fabricstore.FabricDB) *Keeper {
@@ -100,6 +102,8 @@ func NewKeeper(cdc codec.BinaryCodec, ms storetypes.MultiStore, keys map[string]
 		CapabilityKeeper: capKeeper,
 		transferScope:    scopedTransfer,
 		Bank:             NewBankKeeper(bankDB),
+		Sent:             NewSentPacketStore(bankDB),
+		Received:         NewReceivedPacketStore(bankDB),
 	}
 
 	// GetParams (client e connection) e GetNextXSequence (client/
