@@ -15,3 +15,9 @@ scripts/log_tx.txt
 *.log
 __pycache__/
 *.pyc
+
+# Scripts gerados pelos geradores a cada execução
+scripts/register_enroll.sh
+scripts/create_artifacts.sh
+scripts/create_channel.sh
+scripts/deploy_chaincode.sh
