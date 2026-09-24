@@ -147,33 +147,45 @@ Os `docker-compose` gerados incluem `extra_hosts` apontando os hostnames remotos
 
 ### Modo distribuído via SLURM
 
-Automatiza o deploy em múltiplas máquinas usando o job scheduler SLURM. A máquina de gerenciamento apenas submete os jobs e sai — todo o processamento real corre nos nós de compute.
+Gera **um único script** com todas as fases do deploy, submetido como um job SLURM a partir do nó de login. O job roda nos nós de compute sobre o diretório compartilhado (NFS) definido em `slurm.cluster_project_dir`.
 
-**1. Configure `network.yaml`** com os campos `slurm_node` e `coordinator`:
+**1. Configure `network.yaml`** com `slurm.cluster_project_dir` e, em cada máquina, `ip`, `slurm_node` e exatamente um `coordinator`:
 
 ```yaml
+slurm:
+  cluster_project_dir: "/mnt/prj/<usuario>/<projeto>/IC_Create_Network"
+
 machines:
   maquina_1:
-    ip: "192.168.1.10"
-    slurm_node: "node01"   # nome do nó no SLURM (sbatch --nodelist)
-    coordinator: true       # exatamente um coordenador por cluster
+    ip: "10.10.20.151"
+    slurm_node: "baia1"    # nome do nó no SLURM (sbatch --nodelist)
+    coordinator: true      # executa enrollment, canais e lifecycle do chaincode
   maquina_2:
-    ip: "192.168.1.11"
-    slurm_node: "node02"
-  maquina_3:
-    ip: "192.168.1.12"
-    slurm_node: "node03"
+    ip: "10.10.20.152"
+    slurm_node: "baia2"
 ```
 
-**2. Da máquina de gerenciamento, submeta todos os jobs:**
+**2. Gere o script** (a partir do diretório do projeto no NFS):
 ```bash
-python3 main.py --slurm-deploy
+python3 main.py --slurm-deploy --time 03:00:00   # gera network/logs/fabric-deploy.sh
 ```
 
-O comando submete ~11 jobs encadeados por dependência (`--dependency=afterok`) cobrindo 7 fases:
+**3. Submeta e acompanhe:**
+```bash
+sbatch network/logs/fabric-deploy.sh
+squeue -u $USER
+tail -f network/logs/slurm-<jobid>-fabric-deploy.log   # erros em slurm-<jobid>-fabric-deploy.err
+```
 
-| Fase | Jobs | Executa em |
+Se o script for gerado fora do cluster, copie-o antes para `<cluster_project_dir>/network/logs/` (o `main.py` imprime o `scp` exato).
+
+Fases executadas dentro do job (via `srun`, chamando `main.py --start`/`--setup`):
+
+| Fase | Etapa | Executa em |
 |:---:|:---|:---|
+| -2 | Limpeza dos containers | Todos os nós (paralelo) |
+| -1 | Limpeza dos artefatos gerados (preserva `bin/`) | Coordenador |
+| 0 | Pré-requisitos (baixa os binários do Fabric se faltarem) | Coordenador |
 | 1 | CAs | Todos os nós (paralelo) |
 | 2 | Enrollment | Coordenador |
 | 3 | Artefatos de canal | Coordenador |
@@ -182,15 +194,17 @@ O comando submete ~11 jobs encadeados por dependência (`--dependency=afterok`) 
 | 6 | Chaincode lifecycle | Coordenador |
 | 7 | Containers CCAAS | Nós com chaincode atribuído |
 
-**3. Acompanhe o progresso:**
-```bash
-squeue -u $USER
-tail -f network/logs/slurm-*.log
-```
+> **Requisito:** todos os nós devem acessar o mesmo diretório do projeto via filesystem compartilhado (NFS, Lustre, etc.). Certificados, artefatos e logs ficam em `network/` e são lidos por todos os nós sem cópia manual.
 
-> **Requisito:** todos os nós devem acessar o mesmo diretório do projeto via filesystem compartilhado (NFS, Lustre, etc.). Os certificados e artefatos gerados ficam em `network/` e são lidos por todos os jobs sem necessidade de cópia manual.
+### Artefatos gerados (não versionados)
 
----
+Tudo o que é produzido em execução fica fora do git (`.gitignore`) e é recriado pelo próprio fluxo:
+
+| Caminho | Origem |
+|:---|:---|
+| `bin/` | Binários do Fabric, baixados por `scripts/check_reqs.sh` (fase de pré-requisitos) |
+| `network/` | Crypto, compose, artefatos de canal, `contexto_ativo.json`, `fabric-deploy.sh` e logs do SLURM |
+| `chaincode/*/chaincode`, `chaincode/*.tar.gz` | Chaincode compilado e pacotes CCAAS (`deploy_chaincode.sh`) |
 
 [⬆ Voltar ao topo](#topo)
 
@@ -202,15 +216,17 @@ python3 main.py [COMANDO] [OPÇÕES]
 Comandos principais (mutuamente exclusivos):
   --up                    Sobe a rede completa localmente.
                           Com --machine: sobe apenas os containers daquela máquina.
-  --start                 Inicia uma fase de containers (usado pelos jobs SLURM).
-                          Requer: --machine <nome> --phase [cas|nodes|ccaas]
-  --setup                 Executa uma fase de setup no coordenador (usado pelos jobs SLURM).
-                          Requer: --phase [enroll|artifacts|channels|chaincode]
-  --slurm-deploy          Submete todos os jobs SLURM para o deploy distribuído completo.
+  --start                 Inicia uma fase de containers numa máquina (usado pelo job SLURM).
+                          Requer: --machine <nome> --phase [clean|cas|nodes|ccaas]
+  --setup                 Executa uma fase de setup no coordenador (usado pelo job SLURM).
+                          Requer: --phase [clean|prereqs|enroll|artifacts|channels|chaincode]
+  --slurm-deploy          Gera network/logs/fabric-deploy.sh para submeter com sbatch.
+                          Requer: --time HH:MM:SS
 
 Opções auxiliares:
   --machine <nome>        Máquina definida em network.yaml > machines.
   --phase <fase>          Fase a executar (ver --start e --setup acima).
+  --time HH:MM:SS         Duração máxima do job SLURM (com --slurm-deploy).
   --clean [all|net]       Limpa a infraestrutura.
   --log                   Salva saída dos scripts em network/logs/.
   -n, --network <path>    Caminho alternativo para o network.yaml.

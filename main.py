@@ -301,9 +301,9 @@ def _setup_phase(controller, config, paths, phase):
 
 def _slurm_deploy(config, paths, time):
     """
-    Gera um único script bash com todas as fases do deploy e o submete como
-    um único job SLURM. Deve ser executado do nó de login (externo aos nós
-    de compute). Retorna logo após a submissão.
+    Gera um único script bash (network/logs/fabric-deploy.sh) com todas as
+    fases do deploy, a ser submetido com sbatch no nó de login. Não submete
+    o job: imprime os próximos passos e retorna.
     """
     SlurmDeployGenerator(config, paths).deploy(time=time)
 
@@ -359,8 +359,8 @@ def main():
         action="store_true",
         help=(
             "Inicia uma fase de containers na máquina local. "
-            "Requer --machine e --phase [cas|nodes|ccaas]. "
-            "Usado pelos jobs SLURM do --slurm-deploy."
+            "Requer --machine e --phase [clean|cas|nodes|ccaas]. "
+            "Usado pelo job SLURM gerado por --slurm-deploy."
         )
     )
     group.add_argument(
@@ -368,8 +368,8 @@ def main():
         action="store_true",
         help=(
             "Executa uma fase de setup distribuída no nó coordenador. "
-            "Requer --phase [enroll|artifacts|channels|chaincode]. "
-            "Usado pelos jobs SLURM do --slurm-deploy."
+            "Requer --phase [clean|prereqs|enroll|artifacts|channels|chaincode]. "
+            "Usado pelo job SLURM gerado por --slurm-deploy."
         )
     )
     group.add_argument(
@@ -377,8 +377,8 @@ def main():
         action="store_true",
         dest="slurm_deploy",
         help=(
-            "Gera um script bash com todas as fases do deploy e o submete como "
-            "um único job SLURM a partir do nó de login. Requer --time. "
+            "Gera network/logs/fabric-deploy.sh com todas as fases do deploy, "
+            "para submeter com sbatch no nó de login. Requer --time. "
             "Requer 'slurm_node' e 'coordinator' em network.yaml > machines."
         )
     )
@@ -398,8 +398,8 @@ def main():
         metavar='FASE',
         help=(
             "Fase a executar. "
-            "Para --start: cas | nodes | ccaas. "
-            "Para --setup: enroll | artifacts | channels | chaincode."
+            "Para --start: clean | cas | nodes | ccaas. "
+            "Para --setup: clean | prereqs | enroll | artifacts | channels | chaincode."
         )
     )
     parser.add_argument(
@@ -434,12 +434,12 @@ def main():
             if not args.machine:
                 parser.error("--start requer --machine <nome>")
             if not args.phase:
-                parser.error("--start requer --phase [cas|nodes|ccaas]")
+                parser.error("--start requer --phase [clean|cas|nodes|ccaas]")
             _start_phase(controller, config, paths, args.machine, args.phase)
 
         elif args.setup:
             if not args.phase:
-                parser.error("--setup requer --phase [enroll|artifacts|channels|chaincode]")
+                parser.error("--setup requer --phase [clean|prereqs|enroll|artifacts|channels|chaincode]")
             _setup_phase(controller, config, paths, args.phase)
 
         elif args.slurm_deploy:
