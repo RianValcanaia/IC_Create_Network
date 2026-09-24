@@ -3,7 +3,7 @@
   "annotations": {
     "list": []
   },
-  "description": "Benchmark Hermes + Hyperledger Fabric 3.0 SmartBFT — Métricas M1–M6 em tempo real",
+  "description": "Totais e taxas de transações são contados por peer (cada transação é gravada nos 8 peers); o TPS segue a mesma query de benchmark/analise_resultados.py.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
@@ -41,11 +41,11 @@
               },
               {
                 "color": "yellow",
-                "value": 6
+                "value": 1
               },
               {
                 "color": "green",
-                "value": 12
+                "value": 8
               }
             ]
           },
@@ -103,7 +103,7 @@
               },
               {
                 "color": "yellow",
-                "value": 2
+                "value": 3
               },
               {
                 "color": "green",
@@ -256,7 +256,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(ledger_transaction_count{validation_code=\"MVCC_READ_CONFLICT\"}) or vector(0)",
+          "expr": "max(sum by (instance) (ledger_transaction_count{validation_code=\"MVCC_READ_CONFLICT\"})) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -318,7 +318,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(ledger_transaction_count{validation_code=\"INVALID\"}) or vector(0)",
+          "expr": "max(sum by (instance) (ledger_transaction_count{validation_code=\"INVALID\"})) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -372,7 +372,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(ledger_transaction_count{validation_code=\"VALID\"}) or vector(0)",
+          "expr": "max(sum by (instance) (ledger_transaction_count{validation_code=\"VALID\"})) or vector(0)",
           "legendFormat": "",
           "refId": "A"
         }
@@ -435,7 +435,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(rate(ledger_transaction_count{validation_code=\"VALID\", channel=\"channel-all\"}[1m]))",
+          "expr": "max(rate(ledger_transaction_count{validation_code=\"VALID\", channel=\"channel-all\"}[1m]))",
           "legendFormat": "tx válidas/s",
           "refId": "A"
         },
@@ -444,7 +444,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "increase(ledger_blockchain_height{channel=\"channel-all\"}[1m])",
+          "expr": "max(increase(ledger_blockchain_height{channel=\"channel-all\", job=\"fabric-peers\"}[1m]))",
           "legendFormat": "blocos/1m",
           "refId": "B"
         }
@@ -495,7 +495,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "ledger_blockchain_height{channel=\"channel-all\"}",
+          "expr": "ledger_blockchain_height{channel=\"channel-all\", job=\"fabric-peers\"}",
           "legendFormat": "{{ instance }}",
           "refId": "A"
         }
@@ -708,7 +708,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(rate(ledger_transaction_count{validation_code=\"MVCC_READ_CONFLICT\"}[1m])) or vector(0)",
+          "expr": "max(sum by (instance) (rate(ledger_transaction_count{validation_code=\"MVCC_READ_CONFLICT\"}[1m]))) or vector(0)",
           "legendFormat": "MVCC conflict/s",
           "refId": "A"
         },
@@ -717,7 +717,7 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(rate(ledger_transaction_count{validation_code=\"INVALID\"}[1m])) or vector(0)",
+          "expr": "max(sum by (instance) (rate(ledger_transaction_count{validation_code=\"INVALID\"}[1m]))) or vector(0)",
           "legendFormat": "inválidas/s",
           "refId": "B"
         }
@@ -929,6 +929,262 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "id": 105,
+      "type": "row",
+      "title": "HERMES — API e Ancoragem",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
+      "panels": []
+    },
+    {
+      "id": 106,
+      "type": "timeseries",
+      "title": "Ancoragens por segundo",
+      "description": "Resultados agregados persistidos no MongoDB e ancorados no Fabric pelo hermes-api-server",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(calc_do_agg_block_success_count_total[1m])",
+          "legendFormat": "sucesso"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "rate(calc_do_agg_block_error_count_total[1m]) or vector(0)",
+          "legendFormat": "erro"
+        }
+      ]
+    },
+    {
+      "id": 107,
+      "type": "timeseries",
+      "title": "Persistência + ancoragem P50/P95/P99",
+      "description": "Da chegada do resultado agregado à confirmação da transação no Fabric",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "histogram_quantile(0.5, sum(rate(calc_do_agg_result_block_duration_ms_bucket[1m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "histogram_quantile(0.95, sum(rate(calc_do_agg_result_block_duration_ms_bucket[1m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(calc_do_agg_result_block_duration_ms_bucket[1m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ]
+    },
+    {
+      "id": 108,
+      "type": "timeseries",
+      "title": "SHA3-256 de ancoragem P50/P99",
+      "description": "Tempo do hash canônico ancorado (hasher.hash_duration_ms)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 40
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "histogram_quantile(0.5, sum(rate(hasher_hash_duration_ms_bucket[1m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "histogram_quantile(0.99, sum(rate(hasher_hash_duration_ms_bucket[1m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ]
+    },
+    {
+      "id": 109,
+      "type": "stat",
+      "title": "Exportador da API (hermes-api-server:9464)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "max(up{job=\"hermes-api-server\"}) or vector(0)",
+          "legendFormat": "hermes-api-server"
+        }
+      ]
     }
   ],
   "refresh": "5s",
@@ -950,5 +1206,5 @@
   "timezone": "browser",
   "title": "Hermes — Fabric 3.0 Benchmark",
   "uid": "hermes-fabric-benchmark",
-  "version": 1
+  "version": 2
 }

@@ -382,6 +382,21 @@ class ComposeGenerator:
             ]
         }
 
+        # Jobs adicionais declarados em network.yaml > monitoring.extra_scrape_configs
+        # (ex.: aplicações que usam a rede). Como este arquivo é regenerado a cada
+        # execução, edições manuais seriam perdidas — declare-as no network.yaml.
+        monitoring_conf = self.config['network_topology'].get('monitoring') or {}
+        for job in monitoring_conf.get('extra_scrape_configs') or []:
+            scrape = {'job_name': job['job_name']}
+            for key in ('metrics_path', 'scheme', 'scrape_interval'):
+                if key in job:
+                    scrape[key] = job[key]
+            static = {'targets': list(job['targets'])}
+            if job.get('labels'):
+                static['labels'] = dict(job['labels'])
+            scrape['static_configs'] = [static]
+            prometheus_config['scrape_configs'].append(scrape)
+
         # salva em IC_Create_Network/monitoring/prometheus.yml
         monitoring_dir = self.paths.network_dir.parent / "monitoring"
         monitoring_dir.mkdir(parents=True, exist_ok=True)
@@ -393,6 +408,9 @@ class ComposeGenerator:
         co.successln(f"prometheus.yml gerado em: {output_path}")
         co.infoln(f"  Peers:    {peer_targets}")
         co.infoln(f"  Orderers: {orderer_targets}")
+        extra_jobs = [j['job_name'] for j in monitoring_conf.get('extra_scrape_configs') or []]
+        if extra_jobs:
+            co.infoln(f"  Extras:   {extra_jobs}")
 
     # gera os arquivos json de perfil de conexao (CCP) usados pelos SDKs como node.js
     def generate_connection_profiles(self):

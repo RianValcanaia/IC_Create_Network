@@ -191,3 +191,16 @@ chaincodes:
     machine: "maquina_1"              # máquina onde o container CCAAS vai rodar
     endorsement_policy: "AND('Org1MSP.member', 'Org2MSP.member', 'Org3MSP.member', 'Org4MSP.member')"
     pdc: []
+
+# Monitoramento: jobs extras incluídos no monitoring/prometheus.yml gerado.
+# O arquivo é regenerado a cada execução — declare aqui o que for além dos
+# peers e orderers (ex.: a API do HERMES, que expõe métricas na porta 9464).
+monitoring:
+  extra_scrape_configs:
+    - job_name: hermes-api-server
+      targets:
+        - hermes-api-server:9464
+      labels:
+        network: HermesNetwork
+        role: api-server
+

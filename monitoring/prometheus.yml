@@ -26,3 +26,10 @@ scrape_configs:
     labels:
       network: FabricNetwork
       role: orderer
+- job_name: hermes-api-server
+  static_configs:
+  - targets:
+    - hermes-api-server:9464
+    labels:
+      network: HermesNetwork
+      role: api-server
