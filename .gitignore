@@ -1,4 +1,17 @@
-benchmark/resultados/
+# Artefatos gerados em runtime — não versionar
 
-benchmark/mutant_payloads.json
-benchmark/__pycache__/
+# Binários do Fabric (baixados por scripts/check_reqs.sh via install-fabric.sh)
+bin/
+
+# Rede gerada a cada deploy (crypto, compose, artefatos de canal, logs do SLURM)
+network/
+
+# Chaincode compilado e pacotes CCAAS gerados por deploy_chaincode.sh
+chaincode/*/chaincode
+chaincode/*.tar.gz
+
+# Logs e caches
+scripts/log_tx.txt
+*.log
+__pycache__/
+*.pyc
