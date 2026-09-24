@@ -21,3 +21,4 @@ scripts/register_enroll.sh
 scripts/create_artifacts.sh
 scripts/create_channel.sh
 scripts/deploy_chaincode.sh
+scripts/start_chaincodes.sh

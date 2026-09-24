@@ -205,6 +205,16 @@ Tudo o que é produzido em execução fica fora do git (`.gitignore`) e é recri
 | `bin/` | Binários do Fabric, baixados por `scripts/check_reqs.sh` (fase de pré-requisitos) |
 | `network/` | Crypto, compose, artefatos de canal, `contexto_ativo.json`, `fabric-deploy.sh` e logs do SLURM |
 | `chaincode/*/chaincode`, `chaincode/*.tar.gz` | Chaincode compilado e pacotes CCAAS (`deploy_chaincode.sh`) |
+| `network/ccaas-tls/` | CA e certificados de servidor TLS dos chaincodes CCAAS |
+| `scripts/{register_enroll,create_artifacts,create_channel,deploy_chaincode,start_chaincodes}.sh` | Scripts gerados pelos geradores a cada execução |
+
+### Chaincode como serviço (CCAAS) com TLS
+
+Os chaincodes rodam em containers próprios (CCAAS, Fabric 3.x) e o canal peer → chaincode usa **TLS de servidor**:
+
+- O gerador cria uma CA do CCAAS e um certificado por chaincode em `network/ccaas-tls/`, com SAN igual ao hostname do container (`<chaincode>.<canal>`).
+- O `connection.json` do pacote traz `"tls_required": true` e o `root_cert` dessa CA — o peer verifica o certificado do chaincode.
+- O container recebe a chave e o certificado (`CHAINCODE_TLS_KEY_FILE` / `CHAINCODE_TLS_CERT_FILE`) e o `shim.ChaincodeServer` sobe com TLS (`ccaasTLS()` em cada chaincode).
 
 [⬆ Voltar ao topo](#topo)
 

@@ -18,6 +18,7 @@ import stat
 import json
 import tarfile
 import io
+import subprocess
 from ..utils import Colors as co
 
 # ── Constantes para atribuição automática de portas de operações (métricas) ──
@@ -207,6 +208,7 @@ class ChaincodeDeployGenerator:
                     f"-p {cc_port}:{cc_port} "
                     f"-e CHAINCODE_SERVER_ADDRESS=0.0.0.0:{cc_port} "
                     f"-e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID "
+                    f"{self._ccaas_tls_docker_args(cc)}"
                     f"-v {abs_cc_path}:/opt/gopath/src/chaincode "
                     f"-w /opt/gopath/src/chaincode "
                     f"{img_prefix}/fabric-ccenv:{fabric_version} "
@@ -367,6 +369,7 @@ class ChaincodeDeployGenerator:
                 f"-p {cc_port}:{cc_port} "
                 f"-e CHAINCODE_SERVER_ADDRESS=0.0.0.0:{cc_port} "
                 f"-e CORE_CHAINCODE_ID_NAME=$PACKAGE_ID "
+                f"{self._ccaas_tls_docker_args(cc)}"
                 f"-v {abs_cc_path}:/opt/gopath/src/chaincode "
                 f"-w /opt/gopath/src/chaincode "
                 f"{img_prefix}/fabric-ccenv:{fabric_version} "
@@ -426,16 +429,80 @@ class ChaincodeDeployGenerator:
             with open(output_path, 'w') as f:
                 json.dump(collections, f, indent=4)
 
+    def _ccaas_tls_dir(self):
+        return self.paths.network_dir / "ccaas-tls"
+
+    def _ensure_ccaas_tls(self, cc):
+        """
+        Garante a CA do CCAAS e o certificado de servidor do chaincode
+        (SAN = hostname do container, o mesmo do connection.json).
+
+        Gerados em network/ccaas-tls/ (artefato de runtime) e reaproveitados se já
+        existirem, para que o root_cert embutido no pacote e o certificado montado
+        no container (start_chaincodes.sh, fase 7 do SLURM) sejam consistentes.
+        O diretório é 700; os arquivos são montados individualmente no container
+        (usuário 'chaincode'), por isso ficam 644.
+        """
+        tls_dir = self._ccaas_tls_dir()
+        tls_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(tls_dir, 0o700)
+        ca_key, ca_crt = tls_dir / "ca.key", tls_dir / "ca.crt"
+        service = f"{cc['name']}.{cc['channel']}"
+        srv_key, srv_crt = tls_dir / f"{service}.key", tls_dir / f"{service}.crt"
+
+        def run(cmd, stdin=None):
+            subprocess.run(cmd, input=stdin, check=True, capture_output=True)
+
+        if not (ca_key.exists() and ca_crt.exists()):
+            run(["openssl", "ecparam", "-name", "prime256v1", "-genkey", "-noout", "-out", str(ca_key)])
+            run(["openssl", "req", "-new", "-x509", "-sha256", "-days", "3650", "-key", str(ca_key),
+                 "-out", str(ca_crt), "-subj", "/CN=CCAAS TLS CA/O=IC_Create_Network",
+                 "-addext", "basicConstraints=critical,CA:TRUE,pathlen:0",
+                 "-addext", "keyUsage=critical,keyCertSign,cRLSign"])
+            os.chmod(ca_key, 0o600)
+
+        if not (srv_key.exists() and srv_crt.exists()):
+            run(["openssl", "ecparam", "-name", "prime256v1", "-genkey", "-noout", "-out", str(srv_key)])
+            csr = subprocess.run(["openssl", "req", "-new", "-sha256", "-key", str(srv_key),
+                                  "-subj", f"/CN={service}"], check=True, capture_output=True).stdout
+            ext = tls_dir / f"{service}.ext"
+            ext.write_text("basicConstraints=critical,CA:FALSE\n"
+                           "keyUsage=critical,digitalSignature\n"
+                           "extendedKeyUsage=serverAuth\n"
+                           f"subjectAltName=DNS:{service},DNS:localhost,IP:127.0.0.1\n")
+            run(["openssl", "x509", "-req", "-sha256", "-days", "825", "-CA", str(ca_crt),
+                 "-CAkey", str(ca_key), "-CAcreateserial", "-extfile", str(ext),
+                 "-out", str(srv_crt)], stdin=csr)
+            ext.unlink()
+            (tls_dir / "ca.srl").unlink(missing_ok=True)
+            os.chmod(srv_key, 0o644)
+
+        return {"ca": ca_crt, "key": srv_key, "cert": srv_crt}
+
+    def _ccaas_tls_docker_args(self, cc):
+        """Argumentos do docker run que montam o certificado de servidor no container CCAAS."""
+        tls_dir = self._ccaas_tls_dir().resolve()
+        service = f"{cc['name']}.{cc['channel']}"
+        return (
+            f"-v {tls_dir}/{service}.key:/opt/ccaas-tls/server.key:ro "
+            f"-v {tls_dir}/{service}.crt:/opt/ccaas-tls/server.crt:ro "
+            f"-e CHAINCODE_TLS_KEY_FILE=/opt/ccaas-tls/server.key "
+            f"-e CHAINCODE_TLS_CERT_FILE=/opt/ccaas-tls/server.crt "
+        )
+
     def _create_ccaas_package(self, cc, output_path):
         """
         Cria o pacote .tar.gz do chaincode no formato CCAAS esperado pelo Fabric.
         O connection.json aponta para o hostname Docker do container chaincode
-        (resolvido via extra_hosts nos peers em modo distribuído).
+        (resolvido via extra_hosts nos peers em modo distribuído) e exige TLS:
+        o peer verifica o certificado do chaincode pela CA embutida em root_cert.
         """
+        tls = self._ensure_ccaas_tls(cc)
         connection = {
             "address":      f"{cc['name']}.{cc['channel']}:{cc['port']}",
             "dial_timeout": "10s",
-            "tls_required": False
+            "tls_required": True,
+            "root_cert":    tls["ca"].read_text(),
         }
         metadata = {
             "type":  "ccaas",
