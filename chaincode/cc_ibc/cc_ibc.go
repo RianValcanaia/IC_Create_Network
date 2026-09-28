@@ -33,6 +33,8 @@ import (
 
 	fabricmsp "github.com/rianvalcanaia/cosmos-yui-app/lightclients/fabric-msp"
 
+	besuprovermodule "github.com/datachainlab/besu-ibc-relay-prover/module"
+
 	"github.com/rianvalcanaia/cc_ibc/internal/fabricstore"
 	"github.com/rianvalcanaia/cc_ibc/internal/ibcadapter"
 )
@@ -47,6 +49,8 @@ func newCodec() *codec.ProtoCodec {
 	registry := codectypes.NewInterfaceRegistry()
 	ibctm.RegisterInterfaces(registry)
 	fabricmsp.RegisterInterfaces(registry)
+	// light client hb-qbft (Besu)
+	besuprovermodule.Module{}.RegisterInterfaces(registry)
 	return codec.NewProtoCodec(registry)
 }
 
