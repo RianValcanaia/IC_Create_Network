@@ -1,3 +1,19 @@
+/*
+selfAwareClientKeeper: o ajuste que permite ao ibc-go rodar fora do Cosmos.
+
+No handshake de connection (ConnOpenTry e ConnOpenAck), o ibc-go confere se o
+light client que a OUTRA chain tem DESTA chain é válido, chamando
+ValidateSelfClient e GetSelfConsensusState. O keeper original assume que
+"esta chain" é um nó Cosmos: exige um client 07-tendermint e lê o histórico de
+blocos do staking. No Fabric isso falharia sempre.
+
+Este wrapper troca só essas duas funções:
+  - ValidateSelfClient aceita apenas client do tipo fabric-msp;
+  - GetSelfConsensusState monta o ConsensusState a partir da sequência atual
+    do Fabric (sequence.go), que faz o papel de altura.
+
+O resto do client keeper continua o original do ibc-go.
+*/
 package ibcadapter
 
 import (
@@ -25,6 +41,8 @@ type selfAwareClientKeeper struct {
 	selfSequenceTimestamp int64
 }
 
+// ValidateSelfClient aceita só client do tipo fabric-msp; qualquer outro tipo,
+// ou nil, é rejeitado.
 func (k selfAwareClientKeeper) ValidateSelfClient(_ sdk.Context, clientState exported.ClientState) error {
 	if clientState == nil {
 		return errNotSupported
@@ -35,6 +53,8 @@ func (k selfAwareClientKeeper) ValidateSelfClient(_ sdk.Context, clientState exp
 	return nil
 }
 
+// GetSelfConsensusState devolve o ConsensusState do Fabric na altura pedida,
+// que precisa ser a sequência atual (não há histórico de sequências antigas).
 func (k selfAwareClientKeeper) GetSelfConsensusState(_ sdk.Context, height exported.Height) (exported.ConsensusState, error) {
 	seqHeight, ok := height.(clienttypes.Height)
 	if !ok {
@@ -48,6 +68,7 @@ func (k selfAwareClientKeeper) GetSelfConsensusState(_ sdk.Context, height expor
 
 type clientTypeMismatchErr struct{ got string }
 
+// Error devolve o texto do erro de tipo de client errado.
 func (e clientTypeMismatchErr) Error() string {
 	return "ibcadapter: client must be a fabric-msp client, got: " + e.got
 }

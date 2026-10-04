@@ -1,3 +1,7 @@
+/*
+Testes do selfAwareClientKeeper: mostram que o keeper original do ibc-go
+rejeita um client fabric-msp e que o wrapper aceita só esse tipo.
+*/
 package ibcadapter
 
 import (
@@ -19,14 +23,18 @@ type fakeFabricMSPClientState struct {
 	exported.ClientState
 }
 
+// ClientType finge ser um client fabric-msp.
 func (fakeFabricMSPClientState) ClientType() string { return FabricMSPClientType }
 
 type fakeOtherClientState struct {
 	exported.ClientState
 }
 
+// ClientType finge ser um client de outro tipo.
 func (fakeOtherClientState) ClientType() string { return "something-else" }
 
+// TestValidateSelfClient_FabricMSPOverride: o keeper original rejeita fabric-
+// msp; o wrapper aceita fabric-msp e rejeita outros tipos e nil.
 func TestValidateSelfClient_FabricMSPOverride(t *testing.T) {
 	registry := codectypes.NewInterfaceRegistry()
 	ibctm.RegisterInterfaces(registry)
@@ -37,8 +45,8 @@ func TestValidateSelfClient_FabricMSPOverride(t *testing.T) {
 
 	realKeeper := clientkeeper.NewKeeper(cdc, storeKey, noopParamSubspace{}, noopStakingKeeper{}, noopUpgradeKeeper{})
 
-	// 1. Confirma o bloqueio real: o keeper puro do ibc-go rejeita um
-	// client fabric-msp - exatamente o achado documentado no plano.
+	// 1. Confirma o problema: o keeper puro do ibc-go rejeita um client
+	// fabric-msp (é o motivo de o wrapper existir).
 	if err := realKeeper.ValidateSelfClient(ctx, fakeFabricMSPClientState{}); err == nil {
 		t.Fatal("esperava que o clientkeeper.Keeper puro rejeitasse um ClientState fabric-msp (client must be a Tendermint client)")
 	}

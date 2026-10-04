@@ -1,10 +1,26 @@
-// cc_ibc é o chaincode CCaaS que expõe o núcleo do ibc-go v8.2.1
-// como transações Fabric
-//
-// Cada transação recebe/devolve o Msg/Response correspondente do ibc-go
-// serializado em protobuf binário, base64-encoded. O Keeper (internal/ibcadapter)
-// é reconstruído do zero a cada invocação, sobre o WorldState atual do
-// stub.
+/*
+cc_ibc: chaincode que coloca o núcleo do IBC (ibc-go v8.2.1) dentro do
+Hyperledger Fabric.
+
+O Fabric não tem IBC nativo. Este chaincode roda os keepers reais do ibc-go
+(clients, connections, channels) e uma aplicação ICS-20 própria, e expõe cada
+mensagem IBC como uma transação Fabric. O relayer chama essas transações pelo
+fabric-gateway.
+
+Como funciona uma chamada:
+ 1. o argumento chega como a Msg do ibc-go em protobuf, codificada em base64;
+ 2. newKeeper monta os keepers do zero sobre o WorldState atual (nada fica
+    guardado em memória entre uma chamada e outra);
+ 3. o keeper executa a Msg; o que ele lê e escreve vira o read-write set da
+    transação, que o Fabric endossa e grava no ledger.
+
+Tipos de light client que o chaincode sabe decodificar (newCodec):
+07-tendermint (Cosmos), hb-qbft (Besu) e fabric-msp (o client que a outra
+chain tem deste Fabric, conferido no handshake).
+
+Roda como CCaaS (chaincode as a service): main sobe um servidor gRPC que o
+peer chama.
+*/
 package main
 
 import (
@@ -45,6 +61,8 @@ import (
 // do próprio Header/ClientState assinado por cosmos_chain_0.
 const FabricChainID = "fabric-msp-channel-all"
 
+// newCodec registra os tipos que o chaincode precisa abrir de dentro de um
+// Any: os três light clients (07-tendermint, fabric-msp e hb-qbft).
 func newCodec() *codec.ProtoCodec {
 	registry := codectypes.NewInterfaceRegistry()
 	ibctm.RegisterInterfaces(registry)
@@ -61,6 +79,10 @@ type SmartContract struct {
 	contractapi.Contract
 }
 
+// newKeeper monta tudo que uma transação precisa: o banco sobre o WorldState,
+// as stores, os keepers do ibc-go e o sdk.Context (com altura = sequência do
+// Fabric + 1). Também carrega as capabilities e garante a porta transfer
+// ligada ao ICS-20.
 func newKeeper(stub shim.ChaincodeStubInterface) (*ibcadapter.Keeper, sdk.Context) {
 	db := fabricstore.NewFabricDB(stub)
 	keys := ibcadapter.StoreKeys()
@@ -81,6 +103,8 @@ func newKeeper(stub shim.ChaincodeStubInterface) (*ibcadapter.Keeper, sdk.Contex
 	return k, ctx
 }
 
+// currentSequence lê a sequência atual do Fabric (valor e timestamp) em
+// fabric-msp/sequence; devolve 0, 0 se ainda não existir.
 func currentSequence(stub shim.ChaincodeStubInterface) (value uint64, timestamp int64) {
 	bz, err := stub.GetState(SequenceCommitmentKey)
 	if err != nil || len(bz) == 0 {
@@ -93,6 +117,7 @@ func currentSequence(stub shim.ChaincodeStubInterface) (value uint64, timestamp 
 	return value, timestamp
 }
 
+// decodeArg decodifica um argumento em base64 para a Msg protobuf do ibc-go.
 func decodeArg[T any](b64 string, msg *T) error {
 	bz, err := base64.StdEncoding.DecodeString(b64)
 	if err != nil {
@@ -113,6 +138,7 @@ type codecUnmarshaler interface {
 	ProtoMessage()
 }
 
+// encodeResp serializa a resposta em protobuf e devolve em base64.
 func encodeResp(resp interface{ Marshal() ([]byte, error) }) (string, error) {
 	bz, err := resp.Marshal()
 	if err != nil {
@@ -121,12 +147,9 @@ func encodeResp(resp interface{ Marshal() ([]byte, error) }) (string, error) {
 	return base64.StdEncoding.EncodeToString(bz), nil
 }
 
-// CreateClient recebe um clienttypes.MsgCreateClient serializado
-// (protobuf, base64) e devolve o MsgCreateClientResponse no mesmo
-// formato.
-// CreateClient devolve o client-id recém-criado como string simples
-// o relayer precisa saber esse ID pra continuar o handshake (ConnectionOpenInit
-// referencia o client acabado de criar)
+// CreateClient (MsgCreateClient) cria, dentro do Fabric, um light client da
+// outra chain. Devolve o client-id criado (ex.: 07-tendermint-0), que o
+// relayer usa no resto do handshake.
 func (s *SmartContract) CreateClient(ctx contractapi.TransactionContextInterface, msgB64 string) (string, error) {
 	var msg clienttypes.MsgCreateClient
 	if err := decodeArg(msgB64, &msg); err != nil {
@@ -145,6 +168,8 @@ func (s *SmartContract) CreateClient(ctx contractapi.TransactionContextInterface
 	return clientID, nil
 }
 
+// UpdateClient (MsgUpdateClient) atualiza um light client com um header novo
+// da outra chain; o light client verifica o header.
 func (s *SmartContract) UpdateClient(ctx contractapi.TransactionContextInterface, msgB64 string) (string, error) {
 	var msg clienttypes.MsgUpdateClient
 	if err := decodeArg(msgB64, &msg); err != nil {
@@ -158,11 +183,8 @@ func (s *SmartContract) UpdateClient(ctx contractapi.TransactionContextInterface
 	return encodeResp(resp)
 }
 
-// ConnectionOpenInit/Try devolvem o connection-id recém-criado como
-// string simples - mesmo raciocínio de CreateClient acima
-// (MsgConnectionOpen{Init,Try}Response reais são vazios no ibc-go,
-// GenerateConnectionIdentifier usa GetNextConnectionSequence ANTES de
-// incrementar).
+// ConnectionOpenInit é o 1º passo do handshake de connection, no lado que
+// inicia. Devolve o connection-id criado.
 func (s *SmartContract) ConnectionOpenInit(ctx contractapi.TransactionContextInterface, msgB64 string) (string, error) {
 	var msg connectiontypes.MsgConnectionOpenInit
 	if err := decodeArg(msgB64, &msg); err != nil {
@@ -176,6 +198,8 @@ func (s *SmartContract) ConnectionOpenInit(ctx contractapi.TransactionContextInt
 	return connectiontypes.FormatConnectionIdentifier(seq), nil
 }
 
+// ConnectionOpenTry é o 2º passo, no lado que responde: verifica as provas do
+// outro lado e devolve o connection-id criado.
 func (s *SmartContract) ConnectionOpenTry(ctx contractapi.TransactionContextInterface, msgB64 string) (string, error) {
 	var msg connectiontypes.MsgConnectionOpenTry
 	if err := decodeArg(msgB64, &msg); err != nil {
@@ -189,6 +213,8 @@ func (s *SmartContract) ConnectionOpenTry(ctx contractapi.TransactionContextInte
 	return connectiontypes.FormatConnectionIdentifier(seq), nil
 }
 
+// ConnectionOpenAck é o 3º passo: o lado que iniciou verifica as provas do Try
+// e abre a connection.
 func (s *SmartContract) ConnectionOpenAck(ctx contractapi.TransactionContextInterface, msgB64 string) (string, error) {
 	var msg connectiontypes.MsgConnectionOpenAck
 	if err := decodeArg(msgB64, &msg); err != nil {
@@ -202,6 +228,8 @@ func (s *SmartContract) ConnectionOpenAck(ctx contractapi.TransactionContextInte
 	return encodeResp(resp)
 }
 
+// ConnectionOpenConfirm é o 4º passo: o lado que respondeu verifica que o
+// outro abriu e abre também.
 func (s *SmartContract) ConnectionOpenConfirm(ctx contractapi.TransactionContextInterface, msgB64 string) (string, error) {
 	var msg connectiontypes.MsgConnectionOpenConfirm
 	if err := decodeArg(msgB64, &msg); err != nil {
@@ -215,6 +243,7 @@ func (s *SmartContract) ConnectionOpenConfirm(ctx contractapi.TransactionContext
 	return encodeResp(resp)
 }
 
+// ChannelOpenInit é o 1º passo do handshake de channel, no lado que inicia.
 func (s *SmartContract) ChannelOpenInit(ctx contractapi.TransactionContextInterface, msgB64 string) (string, error) {
 	var msg channeltypes.MsgChannelOpenInit
 	if err := decodeArg(msgB64, &msg); err != nil {
@@ -228,6 +257,7 @@ func (s *SmartContract) ChannelOpenInit(ctx contractapi.TransactionContextInterf
 	return encodeResp(resp)
 }
 
+// ChannelOpenTry é o 2º passo do handshake de channel, no lado que responde.
 func (s *SmartContract) ChannelOpenTry(ctx contractapi.TransactionContextInterface, msgB64 string) (string, error) {
 	var msg channeltypes.MsgChannelOpenTry
 	if err := decodeArg(msgB64, &msg); err != nil {
@@ -241,6 +271,7 @@ func (s *SmartContract) ChannelOpenTry(ctx contractapi.TransactionContextInterfa
 	return encodeResp(resp)
 }
 
+// ChannelOpenAck é o 3º passo: o lado que iniciou abre o channel.
 func (s *SmartContract) ChannelOpenAck(ctx contractapi.TransactionContextInterface, msgB64 string) (string, error) {
 	var msg channeltypes.MsgChannelOpenAck
 	if err := decodeArg(msgB64, &msg); err != nil {
@@ -254,6 +285,7 @@ func (s *SmartContract) ChannelOpenAck(ctx contractapi.TransactionContextInterfa
 	return encodeResp(resp)
 }
 
+// ChannelOpenConfirm é o 4º passo: o lado que respondeu abre o channel.
 func (s *SmartContract) ChannelOpenConfirm(ctx contractapi.TransactionContextInterface, msgB64 string) (string, error) {
 	var msg channeltypes.MsgChannelOpenConfirm
 	if err := decodeArg(msgB64, &msg); err != nil {
@@ -267,6 +299,8 @@ func (s *SmartContract) ChannelOpenConfirm(ctx contractapi.TransactionContextInt
 	return encodeResp(resp)
 }
 
+// RecvPacket (MsgRecvPacket) recebe um pacote da outra chain, depois que o
+// light client verifica a prova, e o entrega ao ICS-20.
 func (s *SmartContract) RecvPacket(ctx contractapi.TransactionContextInterface, msgB64 string) (string, error) {
 	var msg channeltypes.MsgRecvPacket
 	if err := decodeArg(msgB64, &msg); err != nil {
@@ -280,6 +314,8 @@ func (s *SmartContract) RecvPacket(ctx contractapi.TransactionContextInterface, 
 	return encodeResp(resp)
 }
 
+// Acknowledgement (MsgAcknowledgement) processa o ack de um pacote que esta
+// chain enviou; se o ack for de erro, os tokens voltam ao remetente.
 func (s *SmartContract) Acknowledgement(ctx contractapi.TransactionContextInterface, msgB64 string) (string, error) {
 	var msg channeltypes.MsgAcknowledgement
 	if err := decodeArg(msgB64, &msg); err != nil {
@@ -293,6 +329,8 @@ func (s *SmartContract) Acknowledgement(ctx contractapi.TransactionContextInterf
 	return encodeResp(resp)
 }
 
+// Timeout (MsgTimeout) trata um pacote enviado que não foi recebido a tempo:
+// os tokens voltam ao remetente.
 func (s *SmartContract) Timeout(ctx contractapi.TransactionContextInterface, msgB64 string) (string, error) {
 	var msg channeltypes.MsgTimeout
 	if err := decodeArg(msgB64, &msg); err != nil {
@@ -306,7 +344,8 @@ func (s *SmartContract) Timeout(ctx contractapi.TransactionContextInterface, msg
 	return encodeResp(resp)
 }
 
-// Transfer envia um ICS-20 a partir do Fabric
+// Transfer inicia uma transferência ICS-20 a partir do Fabric: debita o
+// remetente e grava o pacote. Devolve a sequence do pacote.
 func (s *SmartContract) Transfer(ctx contractapi.TransactionContextInterface, portID, channelID, denom, amount, sender, receiver string, timeoutRevisionNumber, timeoutRevisionHeight, timeoutTimestamp uint64) (string, error) {
 	k, sdkCtx := newKeeper(ctx.GetStub())
 	timeoutHeight := clienttypes.NewHeight(timeoutRevisionNumber, timeoutRevisionHeight)
@@ -317,7 +356,8 @@ func (s *SmartContract) Transfer(ctx contractapi.TransactionContextInterface, po
 	return strconv.FormatUint(seq, 10), nil
 }
 
-// QueryBalance devolve o saldo de account no denom
+// QueryBalance devolve o saldo de uma conta num denom (ledger de saldos do
+// ICS-20).
 func (s *SmartContract) QueryBalance(ctx contractapi.TransactionContextInterface, account, denom string) (string, error) {
 	k, _ := newKeeper(ctx.GetStub())
 	amount, err := k.Bank.GetBalance(denom, account)
@@ -327,9 +367,8 @@ func (s *SmartContract) QueryBalance(ctx contractapi.TransactionContextInterface
 	return amount.String(), nil
 }
 
-// QueryClientState devolve o ClientState armazenado (protobuf, base64)
-// necessário pro relayer montar as próximas mensagens do
-// handshake.
+// QueryClientState devolve o ClientState de um client (Any em protobuf,
+// base64); o relayer usa para montar o handshake.
 func (s *SmartContract) QueryClientState(ctx contractapi.TransactionContextInterface, clientID string) (string, error) {
 	k, sdkCtx := newKeeper(ctx.GetStub())
 	cs, found := k.ClientKeeper.GetClientState(sdkCtx, clientID)
@@ -343,6 +382,8 @@ func (s *SmartContract) QueryClientState(ctx contractapi.TransactionContextInter
 	return encodeResp(any)
 }
 
+// QueryConnection devolve a ConnectionEnd de uma connection (protobuf,
+// base64).
 func (s *SmartContract) QueryConnection(ctx contractapi.TransactionContextInterface, connectionID string) (string, error) {
 	k, sdkCtx := newKeeper(ctx.GetStub())
 	conn, found := k.ConnectionKeeper.GetConnection(sdkCtx, connectionID)
@@ -352,6 +393,7 @@ func (s *SmartContract) QueryConnection(ctx contractapi.TransactionContextInterf
 	return encodeResp(&conn)
 }
 
+// QueryChannel devolve o Channel de um port/channel (protobuf, base64).
 func (s *SmartContract) QueryChannel(ctx contractapi.TransactionContextInterface, portID, channelID string) (string, error) {
 	k, sdkCtx := newKeeper(ctx.GetStub())
 	ch, found := k.ChannelKeeper.GetChannel(sdkCtx, portID, channelID)
@@ -361,6 +403,8 @@ func (s *SmartContract) QueryChannel(ctx contractapi.TransactionContextInterface
 	return encodeResp(&ch)
 }
 
+// QueryClientConsensusState devolve o ConsensusState de um client numa altura
+// (Any em protobuf, base64).
 func (s *SmartContract) QueryClientConsensusState(ctx contractapi.TransactionContextInterface, clientID string, revisionNumber, revisionHeight uint64) (string, error) {
 	k, sdkCtx := newKeeper(ctx.GetStub())
 	height := clienttypes.NewHeight(revisionNumber, revisionHeight)
@@ -375,6 +419,8 @@ func (s *SmartContract) QueryClientConsensusState(ctx contractapi.TransactionCon
 	return encodeResp(any)
 }
 
+// QueryNextSequenceReceive devolve a próxima sequence esperada no recebimento
+// (só avança em channel ORDERED).
 func (s *SmartContract) QueryNextSequenceReceive(ctx contractapi.TransactionContextInterface, portID, channelID string) (string, error) {
 	k, sdkCtx := newKeeper(ctx.GetStub())
 	seq, found := k.ChannelKeeper.GetNextSequenceRecv(sdkCtx, portID, channelID)
@@ -384,10 +430,8 @@ func (s *SmartContract) QueryNextSequenceReceive(ctx contractapi.TransactionCont
 	return strconv.FormatUint(seq, 10), nil
 }
 
-// QueryNextSequenceSend devolve a próxima sequence de envio do canal -
-// usada pelo relayer (relayer/chains/fabric/chain.go,
-// QueryUnfinalizedRelayPackets) pra saber até que sequence iterar
-// procurando pacotes enviados por esta chain ainda não relayados.
+// QueryNextSequenceSend devolve a próxima sequence de envio do channel; o
+// relayer usa como limite ao procurar pacotes enviados ainda não entregues.
 func (s *SmartContract) QueryNextSequenceSend(ctx contractapi.TransactionContextInterface, portID, channelID string) (string, error) {
 	k, sdkCtx := newKeeper(ctx.GetStub())
 	seq, found := k.ChannelKeeper.GetNextSequenceSend(sdkCtx, portID, channelID)
@@ -397,11 +441,8 @@ func (s *SmartContract) QueryNextSequenceSend(ctx contractapi.TransactionContext
 	return strconv.FormatUint(seq, 10), nil
 }
 
-// QuerySentPacket devolve o channeltypes.Packet completo (JSON) que foi
-// enviado nessa sequence - gravado por Keeper.SendTransfer
-// (internal/ibcadapter/transfer_send.go) no momento do envio, já que o
-// ChannelKeeper real só persiste o commitment (hash) do pacote, não o
-// pacote em si.
+// QuerySentPacket devolve, em JSON, o pacote completo enviado numa sequence. O
+// ibc-go só guarda o hash do pacote; o pacote em si fica no SentPacketStore.
 func (s *SmartContract) QuerySentPacket(ctx contractapi.TransactionContextInterface, portID, channelID string, sequence uint64) (string, error) {
 	k, _ := newKeeper(ctx.GetStub())
 	packet, found, err := k.Sent.Get(portID, channelID, sequence)
@@ -418,13 +459,9 @@ func (s *SmartContract) QuerySentPacket(ctx contractapi.TransactionContextInterf
 	return string(bz), nil
 }
 
-// QueryReceivedHighSequence devolve a maior sequence já recebida nesse
-// canal - usada pelo relayer (QueryUnfinalizedRelayAcknowledgements,
-// relayer/chains/fabric/chain.go) pra saber até que sequence iterar
-// procurando acknowledgements ainda não relayados de volta. Canais
-// ICS-20 são UNORDERED, então NextSequenceRecv não serve pra isso (fica
-// travado em 1 por spec) - ver ReceivedPacketStore
-// (internal/ibcadapter/receivedpacket.go).
+// QueryReceivedHighSequence devolve a maior sequence já recebida no channel; o
+// relayer usa como limite ao procurar acks para levar de volta (em channel
+// UNORDERED o NextSequenceRecv não avança).
 func (s *SmartContract) QueryReceivedHighSequence(ctx contractapi.TransactionContextInterface, portID, channelID string) (string, error) {
 	k, _ := newKeeper(ctx.GetStub())
 	high, err := k.Received.HighSequence(portID, channelID)
@@ -434,11 +471,8 @@ func (s *SmartContract) QueryReceivedHighSequence(ctx contractapi.TransactionCon
 	return strconv.FormatUint(high, 10), nil
 }
 
-// QueryReceivedPacket devolve (JSON) o Packet recebido e a
-// Acknowledgement escrita pra essa sequence - gravados por
-// Keeper.RecvPacket (internal/ibcadapter/msg_server.go) no momento do
-// recebimento, já que o ChannelKeeper real só persiste o hash da
-// Acknowledgement, não ela em si.
+// QueryReceivedPacket devolve, em JSON, o pacote recebido e o ack escrito para
+// ele, guardados no ReceivedPacketStore (o ibc-go só guarda o hash do ack).
 func (s *SmartContract) QueryReceivedPacket(ctx contractapi.TransactionContextInterface, portID, channelID string, sequence uint64) (string, error) {
 	k, _ := newKeeper(ctx.GetStub())
 	packet, ack, found, err := k.Received.Get(portID, channelID, sequence)
@@ -459,6 +493,8 @@ func (s *SmartContract) QueryReceivedPacket(ctx contractapi.TransactionContextIn
 	return string(bz), nil
 }
 
+// QueryPacketCommitment devolve o hash (commitment) de um pacote enviado que
+// ainda não foi confirmado.
 func (s *SmartContract) QueryPacketCommitment(ctx contractapi.TransactionContextInterface, portID, channelID string, sequence uint64) (string, error) {
 	k, sdkCtx := newKeeper(ctx.GetStub())
 	commitment := k.ChannelKeeper.GetPacketCommitment(sdkCtx, portID, channelID, sequence)
@@ -468,12 +504,15 @@ func (s *SmartContract) QueryPacketCommitment(ctx contractapi.TransactionContext
 	return base64.StdEncoding.EncodeToString(commitment), nil
 }
 
+// QueryPacketReceipt devolve true se o pacote dessa sequence já foi recebido.
 func (s *SmartContract) QueryPacketReceipt(ctx contractapi.TransactionContextInterface, portID, channelID string, sequence uint64) (string, error) {
 	k, sdkCtx := newKeeper(ctx.GetStub())
 	_, found := k.ChannelKeeper.GetPacketReceipt(sdkCtx, portID, channelID, sequence)
 	return strconv.FormatBool(found), nil
 }
 
+// QueryPacketAck devolve o hash (commitment) do ack escrito para um pacote
+// recebido.
 func (s *SmartContract) QueryPacketAck(ctx contractapi.TransactionContextInterface, portID, channelID string, sequence uint64) (string, error) {
 	k, sdkCtx := newKeeper(ctx.GetStub())
 	ack, found := k.ChannelKeeper.GetPacketAcknowledgement(sdkCtx, portID, channelID, sequence)
@@ -483,6 +522,8 @@ func (s *SmartContract) QueryPacketAck(ctx contractapi.TransactionContextInterfa
 	return base64.StdEncoding.EncodeToString(ack), nil
 }
 
+// QuerySequence devolve a sequência atual do Fabric no formato
+// "valor,timestamp".
 func (s *SmartContract) QuerySequence(ctx contractapi.TransactionContextInterface) (string, error) {
 	current, err := ctx.GetStub().GetState(SequenceCommitmentKey)
 	if err != nil {
@@ -498,10 +539,10 @@ func (s *SmartContract) QuerySequence(ctx contractapi.TransactionContextInterfac
 	return fmt.Sprintf("%d,%d", value, timestamp), nil
 }
 
-// ProveCommitment relê o valor atual em key e o regrava só pra produzir um novo write-set
-// endossado contendo (key, value). Necessário porque VerifyEndorsedCommitment
-// (lado Cosmos) verifica uma prova contra o write-set de uma transação
-// endossada, não uma prova Merkle contra uma raiz.
+// ProveCommitment relê o valor de uma chave da store ibc e grava o mesmo valor
+// de novo, só para ele aparecer no write-set desta transação. O endosso dessa
+// transação é a prova que o light client fabric-msp verifica do outro lado, já
+// que o Fabric não tem árvore Merkle.
 func (s *SmartContract) ProveCommitment(ctx contractapi.TransactionContextInterface, key string) (string, error) {
 	store := fabricstore.StoreByName(fabricstore.NewFabricDB(ctx.GetStub()), ibcadapter.StoreKeyIBC)
 	value := store.Get([]byte(key))
@@ -512,6 +553,8 @@ func (s *SmartContract) ProveCommitment(ctx contractapi.TransactionContextInterf
 	return base64.StdEncoding.EncodeToString(value), nil
 }
 
+// AdvanceSequence incrementa a sequência do Fabric (a "altura" que os light
+// clients do outro lado acompanham) e grava junto o timestamp atual.
 func (s *SmartContract) AdvanceSequence(ctx contractapi.TransactionContextInterface) (string, error) {
 	current, err := ctx.GetStub().GetState(SequenceCommitmentKey)
 	if err != nil {
@@ -533,6 +576,8 @@ func (s *SmartContract) AdvanceSequence(ctx contractapi.TransactionContextInterf
 	return base64.StdEncoding.EncodeToString(sequenceBytes), nil
 }
 
+// main sobe o chaincode como servidor CCaaS, com o id e o endereço vindos das
+// variáveis de ambiente que o peer configura.
 func main() {
 	smartContract := new(SmartContract)
 

@@ -1,3 +1,11 @@
+/*
+BankKeeper: o livro de saldos do ICS-20 dentro do chaincode.
+
+Um chaincode não tem o módulo bank do Cosmos, então cada saldo fica numa
+chave do WorldState por (denom, conta): ics20/balance/<denom>/<conta>. A
+"conta" é só um texto (ex.: fabric-user-0, ou o endereço bech32 de quem
+recebe), não uma identidade Fabric. O valor é um sdkmath.Int serializado.
+*/
 package ibcadapter
 
 import (
@@ -13,16 +21,17 @@ type BankKeeper struct {
 	db *fabricstore.FabricDB
 }
 
+// NewBankKeeper cria o BankKeeper sobre o FabricDB.
 func NewBankKeeper(db *fabricstore.FabricDB) BankKeeper {
 	return BankKeeper{db: db}
 }
 
+// balanceKey monta a chave do saldo de uma conta num denom.
 func balanceKey(denom, account string) []byte {
 	return []byte(fmt.Sprintf("ics20/balance/%s/%s", denom, account))
 }
 
-// GetBalance devolve o saldo atual (zero se a conta nunca recebeu esse
-// denom).
+// GetBalance devolve o saldo atual (zero se a conta nunca recebeu esse denom).
 func (k BankKeeper) GetBalance(denom, account string) (sdkmath.Int, error) {
 	bz, err := k.db.Get(balanceKey(denom, account))
 	if err != nil {
@@ -38,6 +47,7 @@ func (k BankKeeper) GetBalance(denom, account string) (sdkmath.Int, error) {
 	return amount, nil
 }
 
+// setBalance grava o saldo.
 func (k BankKeeper) setBalance(denom, account string, amount sdkmath.Int) error {
 	bz, err := amount.Marshal()
 	if err != nil {
@@ -46,7 +56,8 @@ func (k BankKeeper) setBalance(denom, account string, amount sdkmath.Int) error 
 	return k.db.Set(balanceKey(denom, account), bz)
 }
 
-// AddBalance credita amount ao saldo de account em denom (mint/unescrow).
+// AddBalance soma amount ao saldo (recebimento, criação de voucher ou saída do
+// escrow).
 func (k BankKeeper) AddBalance(denom, account string, amount sdkmath.Int) error {
 	current, err := k.GetBalance(denom, account)
 	if err != nil {
@@ -55,9 +66,8 @@ func (k BankKeeper) AddBalance(denom, account string, amount sdkmath.Int) error 
 	return k.setBalance(denom, account, current.Add(amount))
 }
 
-// SubBalance debita amount do saldo de account em denom (burn/escrow) -
-// erro se o saldo for insuficiente, mesmo comportamento de um SendCoins
-// real contra um remetente sem fundos.
+// SubBalance subtrai amount do saldo (envio, queima ou entrada no escrow); dá
+// erro se o saldo não for suficiente.
 func (k BankKeeper) SubBalance(denom, account string, amount sdkmath.Int) error {
 	current, err := k.GetBalance(denom, account)
 	if err != nil {

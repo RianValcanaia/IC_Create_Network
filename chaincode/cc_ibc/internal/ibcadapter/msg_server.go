@@ -1,3 +1,18 @@
+/*
+Execução de cada Msg IBC dentro do chaincode.
+
+É a versão deste adaptador do msg_server.go do ibc-go
+(modules/core/keeper/msg_server.go): cada função chama os keepers na mesma
+ordem que o ibc-go chama num nó Cosmos. Nos channels e pacotes, ela também
+acha pelo router o módulo dono da porta (aqui, sempre o ICS-20) e chama os
+callbacks dele (OnChanOpenInit, OnRecvPacket...).
+
+Existe porque o keeper.Keeper do ibc-go não pode ser montado de fora do
+pacote dele com o selfAwareClientKeeper no lugar do client keeper.
+
+Diferença em relação ao original: o RecvPacket também grava o pacote e o ack
+no ReceivedPacketStore, para o relayer conseguir lê-los depois.
+*/
 package ibcadapter
 
 import (
@@ -13,6 +28,8 @@ import (
 	porttypes "github.com/cosmos/ibc-go/v8/modules/core/05-port/types"
 )
 
+// relayerAddress converte o signer da Msg em endereço; se não for bech32 (ex.:
+// uma identidade do Fabric), usa os bytes do próprio texto.
 func relayerAddress(signer string) sdk.AccAddress {
 	if addr, err := sdk.AccAddressFromBech32(signer); err == nil {
 		return addr
@@ -20,7 +37,7 @@ func relayerAddress(signer string) sdk.AccAddress {
 	return sdk.AccAddress(signer)
 }
 
-// CreateClient defines a rpc handler method for MsgCreateClient.
+// CreateClient desempacota o ClientState e o ConsensusState e cria o client.
 func (k Keeper) CreateClient(goCtx context.Context, msg *clienttypes.MsgCreateClient) (*clienttypes.MsgCreateClientResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -41,7 +58,8 @@ func (k Keeper) CreateClient(goCtx context.Context, msg *clienttypes.MsgCreateCl
 	return &clienttypes.MsgCreateClientResponse{}, nil
 }
 
-// UpdateClient defines a rpc handler method for MsgUpdateClient.
+// UpdateClient desempacota o header e atualiza o client; o light client
+// verifica o header.
 func (k Keeper) UpdateClient(goCtx context.Context, msg *clienttypes.MsgUpdateClient) (*clienttypes.MsgUpdateClientResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -57,7 +75,7 @@ func (k Keeper) UpdateClient(goCtx context.Context, msg *clienttypes.MsgUpdateCl
 	return &clienttypes.MsgUpdateClientResponse{}, nil
 }
 
-// ConnectionOpenInit defines a rpc handler method for MsgConnectionOpenInit.
+// ConnectionOpenInit grava a connection no estado INIT.
 func (k Keeper) ConnectionOpenInit(goCtx context.Context, msg *connectiontypes.MsgConnectionOpenInit) (*connectiontypes.MsgConnectionOpenInitResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -68,7 +86,9 @@ func (k Keeper) ConnectionOpenInit(goCtx context.Context, msg *connectiontypes.M
 	return &connectiontypes.MsgConnectionOpenInitResponse{}, nil
 }
 
-// ConnectionOpenTry defines a rpc handler method for MsgConnectionOpenTry.
+// ConnectionOpenTry verifica as provas de que a outra chain está em INIT
+// (inclusive o client que ela tem desta chain) e grava a connection em
+// TRYOPEN.
 func (k Keeper) ConnectionOpenTry(goCtx context.Context, msg *connectiontypes.MsgConnectionOpenTry) (*connectiontypes.MsgConnectionOpenTryResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -88,7 +108,8 @@ func (k Keeper) ConnectionOpenTry(goCtx context.Context, msg *connectiontypes.Ms
 	return &connectiontypes.MsgConnectionOpenTryResponse{}, nil
 }
 
-// ConnectionOpenAck defines a rpc handler method for MsgConnectionOpenAck.
+// ConnectionOpenAck verifica as provas do TRYOPEN do outro lado e abre a
+// connection (OPEN).
 func (k Keeper) ConnectionOpenAck(goCtx context.Context, msg *connectiontypes.MsgConnectionOpenAck) (*connectiontypes.MsgConnectionOpenAckResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -108,7 +129,8 @@ func (k Keeper) ConnectionOpenAck(goCtx context.Context, msg *connectiontypes.Ms
 	return &connectiontypes.MsgConnectionOpenAckResponse{}, nil
 }
 
-// ConnectionOpenConfirm defines a rpc handler method for MsgConnectionOpenConfirm.
+// ConnectionOpenConfirm verifica a prova de que o outro lado abriu e abre a
+// connection deste lado.
 func (k Keeper) ConnectionOpenConfirm(goCtx context.Context, msg *connectiontypes.MsgConnectionOpenConfirm) (*connectiontypes.MsgConnectionOpenConfirmResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -121,7 +143,8 @@ func (k Keeper) ConnectionOpenConfirm(goCtx context.Context, msg *connectiontype
 	return &connectiontypes.MsgConnectionOpenConfirmResponse{}, nil
 }
 
-// ChannelOpenInit defines a rpc handler method for MsgChannelOpenInit.
+// ChannelOpenInit acha o módulo da porta, grava o channel em INIT e chama o
+// OnChanOpenInit do ICS-20, que confere ordem e versão.
 func (k Keeper) ChannelOpenInit(goCtx context.Context, msg *channeltypes.MsgChannelOpenInit) (*channeltypes.MsgChannelOpenInitResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -156,7 +179,8 @@ func (k Keeper) ChannelOpenInit(goCtx context.Context, msg *channeltypes.MsgChan
 	}, nil
 }
 
-// ChannelOpenTry defines a rpc handler method for MsgChannelOpenTry.
+// ChannelOpenTry verifica a prova do INIT do outro lado, grava o channel em
+// TRYOPEN e chama o OnChanOpenTry.
 func (k Keeper) ChannelOpenTry(goCtx context.Context, msg *channeltypes.MsgChannelOpenTry) (*channeltypes.MsgChannelOpenTryResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -190,7 +214,8 @@ func (k Keeper) ChannelOpenTry(goCtx context.Context, msg *channeltypes.MsgChann
 	}, nil
 }
 
-// ChannelOpenAck defines a rpc handler method for MsgChannelOpenAck.
+// ChannelOpenAck verifica a prova do TRYOPEN, abre o channel e chama o
+// OnChanOpenAck.
 func (k Keeper) ChannelOpenAck(goCtx context.Context, msg *channeltypes.MsgChannelOpenAck) (*channeltypes.MsgChannelOpenAckResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -219,7 +244,8 @@ func (k Keeper) ChannelOpenAck(goCtx context.Context, msg *channeltypes.MsgChann
 	return &channeltypes.MsgChannelOpenAckResponse{}, nil
 }
 
-// ChannelOpenConfirm defines a rpc handler method for MsgChannelOpenConfirm.
+// ChannelOpenConfirm verifica a prova de que o outro lado abriu, abre o
+// channel e chama o OnChanOpenConfirm.
 func (k Keeper) ChannelOpenConfirm(goCtx context.Context, msg *channeltypes.MsgChannelOpenConfirm) (*channeltypes.MsgChannelOpenConfirmResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -246,7 +272,10 @@ func (k Keeper) ChannelOpenConfirm(goCtx context.Context, msg *channeltypes.MsgC
 	return &channeltypes.MsgChannelOpenConfirmResponse{}, nil
 }
 
-// RecvPacket defines a rpc handler method for MsgRecvPacket.
+// RecvPacket verifica a prova do pacote (light client), entrega ao ICS-20
+// (OnRecvPacket), grava o ack e guarda pacote + ack no ReceivedPacketStore. Se
+// o ICS-20 devolver erro, as mudanças de saldo são descartadas, mas o ack de
+// erro é gravado.
 func (k Keeper) RecvPacket(goCtx context.Context, msg *channeltypes.MsgRecvPacket) (*channeltypes.MsgRecvPacketResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -300,7 +329,8 @@ func (k Keeper) RecvPacket(goCtx context.Context, msg *channeltypes.MsgRecvPacke
 	return &channeltypes.MsgRecvPacketResponse{Result: channeltypes.SUCCESS}, nil
 }
 
-// Acknowledgement defines a rpc handler method for MsgAcknowledgement.
+// Acknowledgement verifica a prova do ack, apaga o commitment do pacote e
+// chama o OnAcknowledgementPacket, que devolve os tokens se o ack for de erro.
 func (k Keeper) Acknowledgement(goCtx context.Context, msg *channeltypes.MsgAcknowledgement) (*channeltypes.MsgAcknowledgementResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 
@@ -335,7 +365,8 @@ func (k Keeper) Acknowledgement(goCtx context.Context, msg *channeltypes.MsgAckn
 	return &channeltypes.MsgAcknowledgementResponse{Result: channeltypes.SUCCESS}, nil
 }
 
-// Timeout defines a rpc handler method for MsgTimeout.
+// Timeout verifica a prova de que o pacote não foi recebido até o prazo, apaga
+// o commitment e chama o OnTimeoutPacket, que devolve os tokens.
 func (k Keeper) Timeout(goCtx context.Context, msg *channeltypes.MsgTimeout) (*channeltypes.MsgTimeoutResponse, error) {
 	ctx := sdk.UnwrapSDKContext(goCtx)
 

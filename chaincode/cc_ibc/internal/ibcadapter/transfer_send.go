@@ -1,3 +1,7 @@
+/*
+Envio de uma transferência ICS-20 a partir do Fabric. É o que a transação
+Transfer do cc_ibc.go executa.
+*/
 package ibcadapter
 
 import (
@@ -12,15 +16,10 @@ import (
 	host "github.com/cosmos/ibc-go/v8/modules/core/24-host"
 )
 
-// SendTransfer envia um ICS-20 real a partir desta chain: faz a
-// contabilidade de envio (escrow se esta chain é a origem do denom,
-// burn se é um voucher voltando - mesma lógica de
-// ibctransfertypes.SenderChainIsSource que o Keeper.sendTransfer real do
-// ibc-go usa) e escreve o commitment do pacote via
-// ChannelKeeper.SendPacket real - a mesma chamada que o sendTransfer do
-// ibc-go faz por baixo, sem reimplementar nada de sequence/commitment.
-// A transação "Transfer" do chaincode (cc_ibc.go) é um wrapper fino em
-// cima disto.
+// SendTransfer debita o remetente (escrow se o token é daqui, queima se é um
+// voucher voltando para a origem), cria o pacote pelo ChannelKeeper.SendPacket
+// do ibc-go (que grava o commitment) e guarda o pacote completo no
+// SentPacketStore para o relayer. Devolve a sequence.
 func (k *Keeper) SendTransfer(ctx sdk.Context, portID, channelID, denom, amount, sender, receiver string, timeoutHeight clienttypes.Height, timeoutTimestamp uint64) (uint64, error) {
 	amt, ok := sdkmath.NewIntFromString(amount)
 	if !ok || !amt.IsPositive() {

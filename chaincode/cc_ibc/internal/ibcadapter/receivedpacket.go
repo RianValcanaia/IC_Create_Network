@@ -1,3 +1,16 @@
+/*
+ReceivedPacketStore: guarda cada pacote recebido e o ack escrito para ele,
+por (port, channel, sequence).
+
+Mesmo problema do SentPacketStore, do lado de quem recebe: o ibc-go só grava o
+hash do ack. Sem este store, o relayer não conseguiria levar o ack de volta
+para quem enviou o pacote.
+
+Também guarda a maior sequence recebida em cada channel. Em channel UNORDERED
+(o caso do ICS-20) o NextSequenceRecv não avança, então o relayer usa esse
+valor como limite ao procurar acks. Isso supõe sequences quase contínuas, o
+que vale nos fluxos do projeto (um remetente por channel).
+*/
 package ibcadapter
 
 import (
@@ -10,28 +23,13 @@ import (
 	"github.com/rianvalcanaia/cc_ibc/internal/fabricstore"
 )
 
-// ReceivedPacketStore persiste, por (destPort, destChannel, sequence), o
-// Packet recebido e a Acknowledgement escrita pro ele - mesmo problema
-// do SentPacketStore, mas do lado receptor: o ChannelKeeper real só
-// grava o hash (CommitAcknowledgement) no state, nunca a
-// Acknowledgement em si, e o Cosmos reconstrói via busca de eventos ABCI
-// (Chain.queryReceivedPacket/queryWrittenAcknowledgement em
-// src_codes/yui-relayer/chains/tendermint/query.go) - sem esse índice
-// aqui, a Acknowledgement que esta chain escreve nunca poderia ser
-// relayada de volta pro remetente original (`tx relay-acknowledgements`).
-//
-// Canais ICS-20 são UNORDERED (validateTransferChannelParams,
-// transferapp.go), então NextSequenceRecv não serve pra enumerar "quais
-// sequences já foram recebidas" (fica travado em 1 em canais unordered,
-// por spec). Por isso este store também mantém um high-water mark
-// separado (a maior sequence já recebida) só pra dar ao relayer um
-// limite até onde iterar - MVP: assume sequences aproximadamente
-// sequenciais (verdade nos fluxos deste projeto, um remetente por
-// canal), não uma varredura genérica de sequences esparsas.
+// ReceivedPacketStore guarda os pacotes recebidos e seus acks (ver o topo
+// do arquivo).
 type ReceivedPacketStore struct {
 	db *fabricstore.FabricDB
 }
 
+// NewReceivedPacketStore cria o store sobre o FabricDB.
 func NewReceivedPacketStore(db *fabricstore.FabricDB) ReceivedPacketStore {
 	return ReceivedPacketStore{db: db}
 }
@@ -41,16 +39,20 @@ type receivedPacketRecord struct {
 	Acknowledgement []byte              `json:"acknowledgement"`
 }
 
+// receivedPacketKey monta a chave
+// ics04/recvpacket/<port>/<channel>/<sequence>.
 func receivedPacketKey(portID, channelID string, sequence uint64) []byte {
 	return []byte(fmt.Sprintf("ics04/recvpacket/%s/%s/%d", portID, channelID, sequence))
 }
 
+// receivedHighKey monta a chave ics04/recvhigh/<port>/<channel>, onde fica a
+// maior sequence recebida.
 func receivedHighKey(portID, channelID string) []byte {
 	return []byte(fmt.Sprintf("ics04/recvhigh/%s/%s", portID, channelID))
 }
 
-// Put grava o Packet recebido e a Acknowledgement gravada pra ele, e
-// avança o high-water mark se essa sequence for a maior vista até agora.
+// Put grava pacote + ack e atualiza a maior sequence recebida, se essa for
+// maior.
 func (s ReceivedPacketStore) Put(portID, channelID string, packet channeltypes.Packet, ack []byte) error {
 	record := receivedPacketRecord{Packet: packet, Acknowledgement: ack}
 	bz, err := json.Marshal(&record)
@@ -75,7 +77,7 @@ func (s ReceivedPacketStore) Put(portID, channelID string, packet channeltypes.P
 	return nil
 }
 
-// Get devolve o Packet e a Acknowledgement gravados pra essa sequence.
+// Get devolve o pacote e o ack de uma sequence.
 func (s ReceivedPacketStore) Get(portID, channelID string, sequence uint64) (channeltypes.Packet, []byte, bool, error) {
 	bz, err := s.db.Get(receivedPacketKey(portID, channelID, sequence))
 	if err != nil {
@@ -91,8 +93,7 @@ func (s ReceivedPacketStore) Get(portID, channelID string, sequence uint64) (cha
 	return record.Packet, record.Acknowledgement, true, nil
 }
 
-// HighSequence devolve a maior sequence já recebida (0 se nenhuma
-// ainda).
+// HighSequence devolve a maior sequence recebida no channel (0 se nenhuma).
 func (s ReceivedPacketStore) HighSequence(portID, channelID string) (uint64, error) {
 	bz, err := s.db.Get(receivedHighKey(portID, channelID))
 	if err != nil {

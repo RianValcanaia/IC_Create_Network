@@ -1,3 +1,8 @@
+/*
+Testes de integração do adaptador: montam o Keeper sobre um stub falso do
+Fabric (mockstub_test.go) e rodam operações reais do ibc-go contra uma chain
+Tendermint de teste (pacote ibctesting do ibc-go).
+*/
 package ibcadapter_test
 
 import (
@@ -27,6 +32,8 @@ const (
 	maxClockDrift  = 10 * time.Second
 )
 
+// newTestKeeper monta Keeper e Context sobre um mockStub, do mesmo jeito que o
+// newKeeper do cc_ibc.go.
 func newTestKeeper(t *testing.T) (*ibcadapter.Keeper, sdk.Context) {
 	t.Helper()
 	stub := newMockStub()
@@ -47,8 +54,8 @@ func newTestKeeper(t *testing.T) (*ibcadapter.Keeper, sdk.Context) {
 	return k, ctx
 }
 
-// TestKeeperConstruction confirma que os 4 keepers (client/connection/
-// channel/capability) inicializam sem panic sobre o fabricstore.
+// TestKeeperConstruction confere que os keepers e o router são montados sem
+// panic sobre o fabricstore.
 func TestKeeperConstruction(t *testing.T) {
 	k, _ := newTestKeeper(t)
 	if k.PortKeeper == nil || k.Router == nil || k.CapabilityKeeper == nil {
@@ -56,6 +63,8 @@ func TestKeeperConstruction(t *testing.T) {
 	}
 }
 
+// newRealTendermintClientAndConsensusState cria ClientState e ConsensusState
+// 07-tendermint a partir de um header real da chain de teste.
 func newRealTendermintClientAndConsensusState(t *testing.T, chain *ibctesting.TestChain, header *ibctm.Header) (*ibctm.ClientState, *ibctm.ConsensusState) {
 	t.Helper()
 	clientState := ibctm.NewClientState(
@@ -74,9 +83,8 @@ func newRealTendermintClientAndConsensusState(t *testing.T, chain *ibctesting.Te
 	return clientState, consensusState
 }
 
-// TestCreateAndUpdateClient_RealTendermint prova, com um chain de teste
-// que CreateClient/UpdateClient funcionam de ponta a
-// ponta dentro do adaptador contra um Header Tendermint genuíno
+// TestCreateAndUpdateClient_RealTendermint cria um client 07-tendermint e o
+// atualiza com um header assinado de verdade pela chain de teste.
 func TestCreateAndUpdateClient_RealTendermint(t *testing.T) {
 	coord := ibctesting.NewCoordinator(t, 1)
 	chain := coord.GetChain(ibctesting.GetChainID(1))
@@ -131,9 +139,8 @@ func TestCreateAndUpdateClient_RealTendermint(t *testing.T) {
 	}
 }
 
-// TestConnectionOpenInit confirma o wiring do connectionKeeper (não
-// depende de nenhuma prova externa - ConnOpenInit só grava o estado
-// inicial da connection do lado que inicia o handshake).
+// TestConnectionOpenInit confere que o ConnectionOpenInit grava a connection-0
+// (não depende de provas da outra chain).
 func TestConnectionOpenInit(t *testing.T) {
 	coord := ibctesting.NewCoordinator(t, 1)
 	chain := coord.GetChain(ibctesting.GetChainID(1))

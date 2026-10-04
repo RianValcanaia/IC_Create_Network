@@ -1,3 +1,12 @@
+/*
+SentPacketStore: guarda o pacote completo de cada envio, por
+(port, channel, sequence).
+
+O ibc-go só grava o hash (commitment) do pacote. Num nó Cosmos o relayer
+recupera o pacote original pelos eventos da transação; o Fabric não oferece
+essa busca por eventos ao relayer. Sem este store, o relayer não teria como
+remontar o pacote para entregá-lo na outra chain (o hash não é reversível).
+*/
 package ibcadapter
 
 import (
@@ -9,31 +18,24 @@ import (
 	"github.com/rianvalcanaia/cc_ibc/internal/fabricstore"
 )
 
-// SentPacketStore persiste o channeltypes.Packet completo de cada envio,
-// indexado por sequence. O ChannelKeeper.SendPacket real (ibc-go) só
-// grava o commitment (hash) no estado - por design, porque no Cosmos o
-// relayer reconstrói o Packet original lendo os eventos ABCI da tx que
-// o emitiu (ver Chain.querySentPacket em
-// src_codes/yui-relayer/chains/tendermint/query.go). O Fabric não tem
-// um índice de eventos por tx equivalente exposto ao relayer via
-// fabric-gateway, então sem esse store o lado Fabric nunca teria como
-// devolver o Packet original pra montar um MsgRecvPacket - só o hash,
-// que não é reversível.
+// SentPacketStore guarda o pacote completo de cada envio (ver o topo do
+// arquivo).
 type SentPacketStore struct {
 	db *fabricstore.FabricDB
 }
 
+// NewSentPacketStore cria o store sobre o FabricDB.
 func NewSentPacketStore(db *fabricstore.FabricDB) SentPacketStore {
 	return SentPacketStore{db: db}
 }
 
+// sentPacketKey monta a chave ics04/sentpacket/<port>/<channel>/<sequence>.
 func sentPacketKey(portID, channelID string, sequence uint64) []byte {
 	return []byte(fmt.Sprintf("ics04/sentpacket/%s/%s/%d", portID, channelID, sequence))
 }
 
-// Put grava o Packet exatamente como foi passado a ChannelKeeper.SendPacket
-// (mesmos bytes de Data/timeout que entraram no CommitPacket) - qualquer
-// divergência aqui faz a prova de commitment falhar na chain de destino.
+// Put grava o pacote em JSON. Ele precisa ser idêntico ao usado no SendPacket,
+// senão a prova do commitment falha do outro lado.
 func (s SentPacketStore) Put(portID, channelID string, packet channeltypes.Packet) error {
 	bz, err := json.Marshal(&packet)
 	if err != nil {
@@ -42,9 +44,8 @@ func (s SentPacketStore) Put(portID, channelID string, packet channeltypes.Packe
 	return s.db.Set(sentPacketKey(portID, channelID, packet.Sequence), bz)
 }
 
-// Get devolve o Packet enviado nessa sequence, se ainda estiver
-// armazenado (nunca é removido - ao contrário do commitment, que some
-// do state após o ack/timeout ser processado).
+// Get devolve o pacote enviado nessa sequence. Ele nunca é apagado, ao
+// contrário do commitment, que some depois do ack ou do timeout.
 func (s SentPacketStore) Get(portID, channelID string, sequence uint64) (channeltypes.Packet, bool, error) {
 	bz, err := s.db.Get(sentPacketKey(portID, channelID, sequence))
 	if err != nil {

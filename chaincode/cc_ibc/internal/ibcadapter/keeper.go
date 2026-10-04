@@ -1,9 +1,20 @@
-// Package ibcadapter monta os keepers reais do núcleo do ibc-go v8.2.1
-// (client/connection/channel/capability) rodando dentro do processo do
-// chaincode Fabric, backed pelo fabricstore.MultiStore. Não reimplementa
-// nenhuma verificação criptográfica, só encanamento: o 07-tendermint real do ibc-go verifica Cosmos sem
-// modificação nenhuma; o único ajuste necessário é o override de
-// ValidateSelfClient documentado em selfAwareClientKeeper abaixo.
+/*
+Monta, dentro do chaincode, os keepers reais do núcleo do ibc-go v8.2.1:
+client (02), connection (03), channel (04), port (05) e capability.
+
+Nenhuma verificação criptográfica é reimplementada aqui: o 07-tendermint e os
+outros light clients rodam como num nó Cosmos. Este arquivo só faz o
+encanamento:
+  - os keepers gravam no fabricstore.MultiStore (o WorldState do Fabric);
+  - dependências que só existem num nó Cosmos (staking, upgrade, params
+    legados) viram implementações vazias (noop*);
+  - o client keeper usado pela connection é embrulhado no
+    selfAwareClientKeeper (self_client.go), que ensina o ibc-go a validar o
+    client fabric-msp que a outra chain tem deste Fabric.
+
+Junto com os keepers ficam o BankKeeper (saldos do ICS-20) e os stores de
+pacotes enviados e recebidos, que o relayer consulta.
+*/
 package ibcadapter
 
 import (
@@ -67,6 +78,10 @@ type Keeper struct {
 	Received ReceivedPacketStore
 }
 
+// NewKeeper cria todos os keepers sobre o multistore e faz o que um genesis
+// faria num nó Cosmos: grava os parâmetros (sempre) e os contadores de
+// client/connection/channel (só na primeira vez; se fossem zerados a cada
+// chamada, todo client novo voltaria a se chamar ...-0).
 func NewKeeper(cdc codec.BinaryCodec, ms storetypes.MultiStore, keys map[string]storetypes.StoreKey, memKeys map[string]*storetypes.MemoryStoreKey, selfSeqValue uint64, selfSeqTimestamp int64, bankDB *fabricstore.FabricDB) *Keeper {
 	storeKey := keys[StoreKeyIBC]
 	if storeKey == nil {
@@ -128,20 +143,18 @@ func NewKeeper(cdc codec.BinaryCodec, ms storetypes.MultiStore, keys map[string]
 	return k
 }
 
-// initSequenceOnce grava o valor inicial de uma sequência só se a chave
-// ainda não existir no store - checa direto (Has), sem passar pelo
-// getter real (que panica em vez de devolver "não encontrado" quando a
-// chave não existe).
+// initSequenceOnce grava o valor inicial de um contador só se a chave ainda
+// não existe. Testa a chave direto porque o getter do ibc-go dá panic em vez
+// de devolver "não encontrado".
 func initSequenceOnce(store storetypes.KVStore, key string, setDefault func()) {
 	if !store.Has([]byte(key)) {
 		setDefault()
 	}
 }
 
-// StoreKeys/MemStoreKeys devolvem o conjunto de storetypes.StoreKey que
-// NewKeeper espera em keys/memKeys - separado pra quem monta o
-// fabricstore.MultiStore precisar dos mesmos StoreKey instances (o
-// MultiStore indexa por identidade do ponteiro StoreKey, não por nome).
+// StoreKeys devolve as StoreKeys persistentes (ibc e capability). O MultiStore
+// acha a store pela instância da StoreKey, então quem monta o MultiStore e o
+// Keeper precisa usar as mesmas.
 func StoreKeys() map[string]storetypes.StoreKey {
 	return map[string]storetypes.StoreKey{
 		StoreKeyIBC:        storetypes.NewKVStoreKey(StoreKeyIBC),
@@ -149,22 +162,25 @@ func StoreKeys() map[string]storetypes.StoreKey {
 	}
 }
 
+// MemStoreKeys devolve a StoreKey de memória do capability.
 func MemStoreKeys() map[string]*storetypes.MemoryStoreKey {
 	return storetypes.NewMemoryStoreKeys(MemStoreKeyCapability)
 }
 
-// ScopedTransferKeeper devolve o ScopedKeeper da porta "transfer",
-// escopado durante NewKeeper (capabilitykeeper.Keeper.ScopeToModule só
-// pode ser chamado antes do Seal(), então não dá pra escopar sob
-// demanda depois).
+// ScopedTransferKeeper devolve o ScopedKeeper da porta transfer. Ele é criado
+// no NewKeeper porque só dá para criar antes do Seal.
 func (k *Keeper) ScopedTransferKeeper() capabilitykeeper.ScopedKeeper {
 	return k.transferScope
 }
 
+// InitCapabilities carrega as capabilities gravadas para a store de memória;
+// precisa rodar a cada chamada, já que a memória começa vazia.
 func (k *Keeper) InitCapabilities(ctx sdk.Context) {
 	k.CapabilityKeeper.InitMemStore(ctx)
 }
 
+// BindTransferPort liga a porta transfer ao ICS-20, se ainda não estiver
+// ligada, e guarda a capability da porta.
 func (k *Keeper) BindTransferPort(ctx sdk.Context) error {
 	if k.PortKeeper.IsBound(ctx, ibctransfertypes.PortID) {
 		return nil
@@ -173,10 +189,8 @@ func (k *Keeper) BindTransferPort(ctx sdk.Context) error {
 	return k.transferScope.ClaimCapability(ctx, capability, host.PortPath(ibctransfertypes.PortID))
 }
 
-// SetupRouter monta o porttypes.Router com a TransferApp bindada na
-// porta "transfer" e sela o keeper - mesmo
-// padrão de ibckeeper.Keeper.SetRouter (k.PortKeeper.Router = rtr;
-// k.Router = rtr; k.Router.Seal()).
+// SetupRouter cria o router de portas com a rota transfer -> TransferApp e o
+// sela, como o ibckeeper.Keeper.SetRouter do ibc-go.
 func (k *Keeper) SetupRouter() {
 	rtr := porttypes.NewRouter()
 	rtr.AddRoute(ibctransfertypes.ModuleName, TransferApp{Scope: k.transferScope, Bank: k.Bank})
@@ -191,6 +205,8 @@ func (k *Keeper) SetupRouter() {
 
 type noopParamSubspace struct{}
 
+// GetParamSet só seria chamado numa migração de versão de módulo, que não
+// existe aqui.
 func (noopParamSubspace) GetParamSet(_ sdk.Context, _ paramtypes.ParamSet) {
 	// Nunca invocado no fluxo normal: legacySubspace.GetParamSet só é
 	// chamado por migrations.go (migração de versão de módulo), que
@@ -201,10 +217,14 @@ func (noopParamSubspace) GetParamSet(_ sdk.Context, _ paramtypes.ParamSet) {
 
 type noopStakingKeeper struct{}
 
+// GetHistoricalInfo não é suportado: o Fabric não tem histórico de
+// validadores.
 func (noopStakingKeeper) GetHistoricalInfo(_ context.Context, _ int64) (stakingtypes.HistoricalInfo, error) {
 	return stakingtypes.HistoricalInfo{}, errNotSupported
 }
 
+// UnbondingTime devolve um valor fixo (21 dias), só para nenhum cálculo
+// dividir por zero.
 func (noopStakingKeeper) UnbondingTime(_ context.Context) (time.Duration, error) {
 	// Usado só por misbehaviour baseado em historical info - fora de
 	// escopo (mesmo corte já feito no hb-qbft/fabric-msp). Um valor
@@ -215,30 +235,46 @@ func (noopStakingKeeper) UnbondingTime(_ context.Context) (time.Duration, error)
 
 type noopUpgradeKeeper struct{}
 
+// ClearIBCState não tem nada a limpar.
 func (noopUpgradeKeeper) ClearIBCState(_ context.Context, _ int64) error { return nil }
+
+// GetUpgradePlan: não suportado: não há upgrade de client no Fabric.
 func (noopUpgradeKeeper) GetUpgradePlan(_ context.Context) (upgradetypes.Plan, error) {
 	return upgradetypes.Plan{}, errNotSupported
 }
+
+// GetUpgradedClient: não suportado: não há upgrade de client no Fabric.
 func (noopUpgradeKeeper) GetUpgradedClient(_ context.Context, _ int64) ([]byte, error) {
 	return nil, errNotSupported
 }
+
+// SetUpgradedClient: não suportado: não há upgrade de client no Fabric.
 func (noopUpgradeKeeper) SetUpgradedClient(_ context.Context, _ int64, _ []byte) error {
 	return errNotSupported
 }
+
+// GetUpgradedConsensusState: não suportado: não há upgrade de client no
+// Fabric.
 func (noopUpgradeKeeper) GetUpgradedConsensusState(_ context.Context, _ int64) ([]byte, error) {
 	return nil, errNotSupported
 }
+
+// SetUpgradedConsensusState: não suportado: não há upgrade de client no
+// Fabric.
 func (noopUpgradeKeeper) SetUpgradedConsensusState(_ context.Context, _ int64, _ []byte) error {
 	return errNotSupported
 }
+
+// ScheduleUpgrade: não suportado: não há upgrade de client no Fabric.
 func (noopUpgradeKeeper) ScheduleUpgrade(_ context.Context, _ upgradetypes.Plan) error {
 	return errNotSupported
 }
 
-var errNotSupported = clientNotSupportedErr("ibcadapter: client upgrade / misbehaviour-by-historical-info not supported (out of MVP scope, see nextsteps.md T30)")
+var errNotSupported = clientNotSupportedErr("ibcadapter: client upgrade / misbehaviour-by-historical-info not supported")
 
 type clientNotSupportedErr string
 
+// Error devolve o texto do erro.
 func (e clientNotSupportedErr) Error() string { return string(e) }
 
 var _ clienttypes.StakingKeeper = noopStakingKeeper{}
